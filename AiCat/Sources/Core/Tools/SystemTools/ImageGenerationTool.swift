@@ -13,6 +13,15 @@ public final class ImageGenerationTool: ObservableObject {
         return ModelManager.shared.isDiffusionLoaded
     }
     
+    // Асинхронный интерфейс для вызова из LLM
+    public func generateImageAsync(prompt: String) async -> (image: UIImage?, status: String) {
+        await withCheckedContinuation { continuation in
+            self.generateImage(prompt: prompt) { img, status in
+                continuation.resume(returning: (img, status))
+            }
+        }
+    }
+    
     // Генерация высококачественного офлайн-арта на чипе A17 Pro
     public func generateImage(prompt: String, completion: @escaping (UIImage?, String) -> Void) {
         DispatchQueue.main.async { self.isGenerating = true }
