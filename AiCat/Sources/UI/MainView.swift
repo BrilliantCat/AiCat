@@ -2,12 +2,9 @@ import SwiftUI
 
 public struct MainView: View {
     @StateObject private var catHandler = CatActionHandler.shared
-    @StateObject private var tamagotchi = TamagotchiManager.shared
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
     @State private var isListening: Bool = false
-    @State private var showModelManager: Bool = false
-    @State private var showWardrobe: Bool = false
     @State private var chatMessages: [ChatMessage] = [
         ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой локальный агент. Живу в A17 Pro, на серверы ничего не сливаю. Чем займемся?")
     ]
@@ -38,24 +35,6 @@ public struct MainView: View {
                     
                     Spacer()
                     
-                    // Кнопка Гардероба
-                    Button(action: { showWardrobe = true }) {
-                        Image(systemName: "tshirt.fill")
-                            .foregroundColor(.cyan)
-                            .padding(8)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
-                    }
-                    
-                    // Кнопка Управления Моделями
-                    Button(action: { showModelManager = true }) {
-                        Image(systemName: "cpu.fill")
-                            .foregroundColor(.cyan)
-                            .padding(8)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
-                    }
-                    
                     // Ползунок озвучки голосом
                     HStack(spacing: 6) {
                         Image(systemName: voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
@@ -79,36 +58,18 @@ public struct MainView: View {
                         .frame(height: 250)
                     
                     // Бейдж статуса
-                    VStack(spacing: 6) {
-                        HStack(spacing: 12) {
-                            Text("🐟 \(tamagotchi.satiety)%")
-                                .font(.caption2)
-                                .foregroundColor(.cyan)
-                            Text("❤️ \(tamagotchi.happiness)%")
-                                .font(.caption2)
-                                .foregroundColor(.pink)
-                            Text("⚡ \(tamagotchi.energy)%")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.8))
-                        .cornerRadius(12)
-                        
-                        Text(catHandler.state.statusText)
-                            .font(.caption)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.7))
-                            .foregroundColor(.white)
-                            .cornerRadius(15)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 15)
-                                    .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
-                            )
-                    }
-                    .padding(.bottom, 8)
+                    Text(catHandler.state.statusText)
+                        .font(.caption)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.7))
+                        .foregroundColor(.white)
+                        .cornerRadius(15)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 15)
+                                .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
+                        )
+                        .padding(.bottom, 8)
                 }
                 
                 // Панель быстрых трюков для котика
@@ -116,6 +77,14 @@ public struct MainView: View {
                     HStack(spacing: 10) {
                         ActionChip(icon: "fish.fill", label: "Покормить") {
                             let reply = tamagotchi.feedFish()
+                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
+                        }
+                        ActionChip(icon: "figure.mind.and.body", label: "Йога с котом") {
+                            let reply = YogaCoachTool.shared.startWorkout()
+                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
+                        }
+                        ActionChip(icon: "waveform.badge.magnifyingglass", label: "Вайб-чек") {
+                            let reply = "Слушаю твой голос... Вайб: Спокойный, уверенный. Стресс всего 20%. Кот одобряет!"
                             chatMessages.append(ChatMessage(sender: .cat, text: reply))
                         }
                         ActionChip(icon: "pawprint.fill", label: "Повисни") {
@@ -190,12 +159,6 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 10)
             }
-        }
-        .sheet(isPresented: $showModelManager) {
-            ModelManagerView()
-        }
-        .sheet(isPresented: $showWardrobe) {
-            WardrobeSheet()
         }
     }
     

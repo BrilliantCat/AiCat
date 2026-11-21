@@ -62,19 +62,16 @@ public final class ToolRegistry {
             
         case "tamagotchi_action":
             let act = payload.parameters?["action"] ?? "feed"
-            if act == "feed" {
-                actionResult = TamagotchiManager.shared.feedFish()
-            } else if act == "pet" {
-                actionResult = TamagotchiManager.shared.petCat()
-            } else {
-                actionResult = TamagotchiManager.shared.sleep()
-            }
+            actionResult = act == "feed" ? TamagotchiManager.shared.feedFish() : TamagotchiManager.shared.petCat()
             
-        case "translate_text":
-            let txt = payload.parameters?["text"] ?? ""
-            let lang = payload.parameters?["target_lang"] ?? "английский"
-            actionResult = "Перевожу на \(lang): [Офлайн перевод выполняется на A17 Pro]"
-
+        case "yoga_coach":
+            let cmd = payload.parameters?["command"] ?? "start_workout"
+            actionResult = cmd == "start_workout" ? YogaCoachTool.shared.startWorkout() : YogaCoachTool.shared.stopWorkout()
+            
+        case "voice_vibe_check":
+            let q = payload.parameters?["query"] ?? ""
+            let res = VoiceVibeTool.shared.analyzeVibe(transcribedText: q)
+            actionResult = "Вайб-чек: \(res.dominantEmotion). Стресс: \(res.stressLevel)%. Совет кота: \(res.catAdvice)"
             
         default:
             actionResult = "Инструмент '\(payload.tool)' выполнен."
