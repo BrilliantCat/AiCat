@@ -83,6 +83,14 @@ public struct MainView: View {
                             let reply = YogaCoachTool.shared.startWorkout()
                             chatMessages.append(ChatMessage(sender: .cat, text: reply))
                         }
+                        ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
+                            let reply = CatFitnessCoach.shared.startPushups()
+                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
+                        }
+                        ActionChip(icon: "figure.walk", label: "Приседания") {
+                            let reply = CatFitnessCoach.shared.startSquats()
+                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
+                        }
                         ActionChip(icon: "waveform.badge.magnifyingglass", label: "Вайб-чек") {
                             let reply = "Слушаю твой голос... Вайб: Спокойный, уверенный. Стресс всего 20%. Кот одобряет!"
                             chatMessages.append(ChatMessage(sender: .cat, text: reply))

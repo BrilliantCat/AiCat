@@ -64,9 +64,15 @@ public final class ToolRegistry {
             let act = payload.parameters?["action"] ?? "feed"
             actionResult = act == "feed" ? TamagotchiManager.shared.feedFish() : TamagotchiManager.shared.petCat()
             
-        case "yoga_coach":
-            let cmd = payload.parameters?["command"] ?? "start_workout"
-            actionResult = cmd == "start_workout" ? YogaCoachTool.shared.startWorkout() : YogaCoachTool.shared.stopWorkout()
+        case "yoga_coach", "fitness_coach":
+            let act = payload.parameters?["action"] ?? payload.parameters?["command"] ?? "pushups"
+            if act == "pushups" {
+                actionResult = CatFitnessCoach.shared.startPushups()
+            } else if act == "squats" {
+                actionResult = CatFitnessCoach.shared.startSquats()
+            } else {
+                actionResult = YogaCoachTool.shared.startWorkout()
+            }
             
         case "voice_vibe_check":
             let q = payload.parameters?["query"] ?? ""
