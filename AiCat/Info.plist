@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>AiCat</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>MinimumOSVersion</key>
+    <string>17.0</string>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>AiCat использует речь для офлайн общения с тобой.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AiCat слушает твои команды через микрофон офлайн.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>AiCat создает и читает напоминания.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>AiCat управляет календарем.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>AiCat использует камеру для анализа фото.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>AiCat редактирует фото по твоим командам.</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>

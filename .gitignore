@@ -1,0 +1,4 @@
+*.gguf
+build/
+.DS_Store
+*.xcarchive
