@@ -19,10 +19,6 @@ public final class MusicTool: ObservableObject {
     
     private func setupAudioEngine() {
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-            
             let engine = AVAudioEngine()
             let player = AVAudioPlayerNode()
             engine.attach(player)
@@ -50,23 +46,31 @@ public final class MusicTool: ObservableObject {
             return "Запустил неоновый киберпанк-синт. Время надеть темные очки!"
             
         case "8-bit", "8bit", "ретро":
-            playTonePattern(frequencies: [440.00, 554.37, 659.25, 880.00, 659.25, 880.00], noteDuration: 0.16, waveType: .square)
-            return "Сгенерировал ностальгический 8-битный саундтрек для кошачьих приключений."
+            playTonePattern(frequencies: [440.00, 554.37, 659.25, 880.00, 659.25, 554.37], noteDuration: 0.16, waveType: .square)
+            return "Олдскульный 8-битный чиптюн для разминки лапок!"
             
         default:
-            playTonePattern(frequencies: [329.63, 392.00, 440.00, 523.25], noteDuration: 0.28, waveType: .sine)
-            return "Сгенерировал авторскую кошачью мелодию."
+            playTonePattern(frequencies: [220.00, 277.18, 329.63, 440.00], noteDuration: 0.3, waveType: .sine)
+            return "Синтезировал новую мелодию в чипе A17 Pro."
         }
     }
     
     private enum WaveType { case sine, square, sawtooth }
     
     private func playTonePattern(frequencies: [Double], noteDuration: Double, waveType: WaveType) {
-        if audioEngine == nil || !(audioEngine?.isRunning ?? false) {
+        if audioEngine == nil || audioEngine?.isRunning == false {
             setupAudioEngine()
         }
         
         guard let player = playerNode, let engine = audioEngine, engine.isRunning else { return }
+        
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("MusicTool session activation error: \(error.localizedDescription)")
+        }
         
         var fullAudioDataLeft = [Float]()
         var fullAudioDataRight = [Float]()
@@ -121,7 +125,10 @@ public final class MusicTool: ObservableObject {
         
         player.stop()
         player.scheduleBuffer(pcmBuffer, at: nil, options: .interrupts) { [weak self] in
-            DispatchQueue.main.async { self?.isPlaying = false }
+            DispatchQueue.main.async {
+                self?.isPlaying = false
+                try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            }
         }
         player.play()
     }

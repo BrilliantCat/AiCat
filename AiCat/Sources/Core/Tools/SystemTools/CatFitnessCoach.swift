@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import CoreMotion
 
+@MainActor
 public final class CatFitnessCoach: ObservableObject {
     public static let shared = CatFitnessCoach()
     
@@ -13,10 +14,11 @@ public final class CatFitnessCoach: ObservableObject {
     
     private let motionManager = CMMotionManager()
     private var lastRepTime: TimeInterval = 0
+    private var isSquattingDown: Bool = false
     
     private init() {}
     
-    // Запуск режима подсчета отжиманий (через датчик приближения)
+    // Запуск режима подсчета отжиманий (через датчик приближения Dynamic Island)
     public func startPushups() -> String {
         isWorkoutActive = true
         currentExerciseName = "Отжимания хищника"
@@ -36,22 +38,29 @@ public final class CatFitnessCoach: ObservableObject {
         return "Положи iPhone под грудь экраном вверх! Начинай отжиматься — я вслух считаю каждое чистое повторение. Цель: 15 раз. Погнали!"
     }
     
-    // Запуск приседаний (с отслеживанием через акселерометр)
+    // Запуск приседаний (с отслеживанием 3D-вектора ускорения)
     public func startSquats() -> String {
         isWorkoutActive = true
-        currentExerciseName = "Тигриные приседания"
+        currentExerciseName = "Приседания пантеры"
         currentRepsCount = 0
         targetReps = 20
         catCheerMessage = "Держи телефон в руке или в кармане. Приседай глубоко!"
         
+        UIDevice.current.isProximityMonitoringEnabled = false
         startMotionTracking()
         
-        CatActionHandler.shared.state.moodEmoji = "🐯"
+        CatActionHandler.shared.state.moodEmoji = "🐆"
         CatActionHandler.shared.state.statusText = "Считает приседания: 0/\(targetReps)"
         
-        _ = MusicTool.shared.generateBeat(style: "8-bit")
+        _ = MusicTool.shared.generateBeat(style: "lo-fi")
         
         return "Держи телефон в руке или в кармане. Начинай глубокие приседания — я фиксирую каждое движение!"
+    }
+    
+    // Ручной тап по баннеру тренировки (для проверки или если датчик недоступен)
+    public func manualRecordRep() {
+        guard isWorkoutActive else { return }
+        recordRep()
     }
     
     @objc private func handleProximityChange() {
@@ -59,54 +68,51 @@ public final class CatFitnessCoach: ObservableObject {
         
         if UIDevice.current.proximityState {
             let now = Date().timeIntervalSince1970
-            // Защита от дребезга (не чаще чем раз в 0.7 секунды)
-            guard now - lastRepTime > 0.7 else { return }
+            guard now - lastRepTime > 0.65 else { return }
             lastRepTime = now
-            
-            DispatchQueue.main.async {
-                self.currentRepsCount += 1
-                CatActionHandler.shared.state.statusText = "Отжимания: \(self.currentRepsCount)/\(self.targetReps)"
-                
-                let generator = UIImpactFeedbackGenerator(style: .heavy)
-                generator.impactOccurred()
-                
-                if self.currentRepsCount >= self.targetReps {
-                    self.catCheerMessage = "15! КРАСАВЧИК! Отжался на максимум. Ты зверь, кожаный!"
-                    CatSpeechSynthesizer.shared.speak(text: "Пятнадцать! Отличная работа, кожаный! Ты зверь!")
-                    self.stopWorkout()
-                } else {
-                    let phrases = ["Раз!", "Два!", "Три!", "Четыре!", "Пять, отлично!", "Шесть!", "Семь!", "Восемь, жми!", "Девять!", "Десять, еще пять!", "Одиннадцать!", "Двенадцать!", "Тринадцать!", "Четырнадцать!"]
-                    let text = self.currentRepsCount <= phrases.count ? phrases[self.currentRepsCount - 1] : "\(self.currentRepsCount)!"
-                    CatSpeechSynthesizer.shared.speak(text: text)
-                }
-            }
+            recordRep()
+        }
+    }
+    
+    private func recordRep() {
+        currentRepsCount += 1
+        CatActionHandler.shared.state.statusText = "\(currentExerciseName): \(currentRepsCount)/\(targetReps)"
+        
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+        
+        if currentRepsCount >= targetReps {
+            catCheerMessage = "Молодец! Отличный результат!"
+            CatSpeechSynthesizer.shared.speak(text: "Цель выполнена! \(targetReps) раз! Ты настоящий тигр, кожаный!")
+            stopWorkout()
+        } else {
+            let cheers = ["Четко!", "Отлично!", "Давай еще!", "Красава!"]
+            catCheerMessage = cheers.randomElement()!
+            CatSpeechSynthesizer.shared.speak(text: "\(currentRepsCount)")
         }
     }
     
     private func startMotionTracking() {
         guard motionManager.isAccelerometerAvailable else { return }
-        motionManager.accelerometerUpdateInterval = 0.1
+        motionManager.accelerometerUpdateInterval = 0.05
+        isSquattingDown = false
+        lastRepTime = 0
         
-        var isDown = false
         motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-            guard let self = self, self.isWorkoutActive, let z = data?.acceleration.z else { return }
+            guard let self = self, self.isWorkoutActive, let acc = data?.acceleration else { return }
             
-            if z < -0.65 && !isDown {
-                isDown = true
-            } else if z > -0.25 && isDown {
-                isDown = false
-                self.currentRepsCount += 1
-                CatActionHandler.shared.state.statusText = "Приседания: \(self.currentRepsCount)/\(self.targetReps)"
-                
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
-                
-                if self.currentRepsCount >= self.targetReps {
-                    CatSpeechSynthesizer.shared.speak(text: "Двадцать! Приседания окончены, стальные лапы обеспечены!")
-                    self.stopWorkout()
-                } else {
-                    CatSpeechSynthesizer.shared.speak(text: "\(self.currentRepsCount)")
-                }
+            // Расчет 3D магнитуды вектора ускорения: sqrt(x^2 + y^2 + z^2)
+            // В покое = 1.0g. При опускании тела ускорение проседает < 0.85g.
+            // При торможении внизу и выталкивании вверх > 1.25g.
+            let mag = sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z)
+            let now = Date().timeIntervalSince1970
+            
+            if mag < 0.85 && !self.isSquattingDown && (now - self.lastRepTime > 0.7) {
+                self.isSquattingDown = true
+            } else if mag > 1.25 && self.isSquattingDown {
+                self.isSquattingDown = false
+                self.lastRepTime = now
+                self.recordRep()
             }
         }
     }

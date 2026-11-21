@@ -27,11 +27,12 @@ public struct CatActionState: Codable, Equatable {
         currentOutfit: "Черные кибер-очки",
         isHanging: false,
         moodEmoji: "😼",
-        statusText: "Наблюдаю за тобой из островка",
+        statusText: "Наблюдаю за тобой из A17 Pro",
         executionToken: UUID().uuidString
     )
 }
 
+@MainActor
 public final class CatActionHandler: ObservableObject {
     public static let shared = CatActionHandler()
     
@@ -46,35 +47,42 @@ public final class CatActionHandler: ObservableObject {
         
         let token = UUID().uuidString
         
+        // Если это не повисание — сбрасываем флаг повисания
+        if actionType != .hangOnIsland {
+            state.isHanging = false
+        }
+        
+        var response = ""
+        
         switch actionType {
         case .hangOnIsland:
             state.currentAction = .hangOnIsland
             state.isHanging = true
             state.moodEmoji = "🐾"
-            state.statusText = "Повис на лапках под Dynamic Island!"
+            state.statusText = "Повис на Dynamic Island!"
             state.executionToken = token
-            return "Ухватился когтями за нижнюю грань островка. Вишу, любуюсь твоими обоями!"
+            response = "Ухватился когтями за верхний край! Вишу, любуюсь твоими обоями."
             
         case .wash:
             state.currentAction = .wash
             state.moodEmoji = "👅"
             state.statusText = "Умывается лапкой"
             state.executionToken = token
-            return "*Вылизывает переднюю лапку и аккуратно протирает ушко*. Чистота — залог идеального ИИ."
+            response = "*Вылизывает переднюю лапку и аккуратно протирает ушко*. Чистота — залог идеального ИИ."
             
         case .somersault:
             state.currentAction = .somersault
             state.moodEmoji = "🤸‍♂️"
-            state.statusText = "Крутит сальто в невесомости"
+            state.statusText = "Крутит сальто назад"
             state.executionToken = token
-            return "*Сделал грациозное сальто назад и приземлился на все четыре лапы*. Десять из десяти!"
+            response = "*Сделал грациозное сальто назад и приземлился на все четыре лапы*. Десять из десяти!"
             
         case .play:
             state.currentAction = .play
             state.moodEmoji = "🧶"
-            state.statusText = "Гоняет цифровой клубок"
+            state.statusText = "Играет с лазером"
             state.executionToken = token
-            return "*Поймал виртуальный лазерный луч лапой*. Ладно, признаю, это было весело."
+            response = "*Поймал виртуальный лазерный луч лапой*. Ладно, признаю, это было весело!"
             
         case .dressUp:
             let outfit = item ?? "Стильный черный худи и темные очки"
@@ -82,9 +90,9 @@ public final class CatActionHandler: ObservableObject {
             state.currentOutfit = outfit
             state.currentAction = .dressUp
             state.moodEmoji = "🕶️"
-            state.statusText = "Одет с иголочки (\(outfit))"
+            state.statusText = "Одет: \(outfit)"
             state.executionToken = token
-            return "Приоделся! \(outfit) сидит идеально. Теперь я самый стильный агент в твоем телефоне."
+            response = "Приоделся! \(outfit) сидит идеально. Самый стильный агент в твоем телефоне."
             
         case .takeOff:
             state.isDressed = false
@@ -93,26 +101,45 @@ public final class CatActionHandler: ObservableObject {
             state.moodEmoji = "😸"
             state.statusText = "Натуральная шерсть"
             state.executionToken = token
-            return "Скинул гардероб, остался в естественной шубке. Так дышится свободнее."
+            response = "Скинул гардероб, остался в естественной шубке. Так дышится свободнее."
             
         case .sleep:
             state.currentAction = .sleep
             state.moodEmoji = "💤"
-            state.statusText = "Спит и сладко посапывает"
+            state.statusText = "Спит и мурчит"
             state.executionToken = token
-            return "*Свернулся калачиком на Dynamic Island и тихо замурлыкал*. Разбуди меня стуком по экрану."
+            response = "*Свернулся калачиком и сладко посапывает*. Мур-мяу..."
             
         case .wake:
             state.currentAction = .idle
             state.moodEmoji = "😼"
-            state.statusText = "Бодр и готов к задачам"
+            state.statusText = "Бодр и готов к делам"
             state.executionToken = token
-            return "*Потянулся, зевнул и поправил очки*. Я на связи, кожаный. Что делаем?"
+            response = "*Потянулся, зевнул и поправил очки*. Я на связи, кожаный. Что делаем?"
             
         case .idle:
             state.currentAction = .idle
             state.executionToken = token
-            return "Мяу! Жду твоих команд."
+            response = "Мяу! Жду твоих команд."
         }
+        
+        // Синхронизируем состояние с Dynamic Island
+        LiveActivityManager.shared.update(status: state.statusText, mood: state.moodEmoji, action: state.statusText)
+        
+        return response
+    }
+    
+    // Интерактивное поглаживание кота по тапу
+    public func pet() -> String {
+        let replies = [
+            "*Мурлычет на низких частотах и трется головой о палец*. Приятно, кожаный!",
+            "*Довольно прищурил глаза за темными очками*. Вот это сервис, продолжай!",
+            "*Выгнул спинку дугой и заурчал*. Обожаю, когда ты меня гладишь!"
+        ]
+        state.moodEmoji = "😻"
+        state.statusText = "Мурчит от удовольствия"
+        state.executionToken = UUID().uuidString
+        LiveActivityManager.shared.update(status: state.statusText, mood: state.moodEmoji, action: "Мурчит")
+        return replies.randomElement()!
     }
 }

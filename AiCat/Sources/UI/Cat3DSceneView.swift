@@ -394,7 +394,17 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let gen = UIImpactFeedbackGenerator(style: .medium)
             gen.impactOccurred()
             _ = TamagotchiManager.shared.petCat()
-            _ = self.parent.actionHandler.execute(action: "wash")
+            _ = self.parent.actionHandler.pet()
+            
+            // Анимация радостного потягивания при поглаживании
+            if let cat = self.parent.actionHandler.state.currentAction == .idle ? gesture.view as? SCNView : nil,
+               let catRoot = cat.scene?.rootNode.childNode(withName: "AiCatRoot", recursively: true) {
+                let purrStretch = SCNAction.sequence([
+                    SCNAction.scale(to: SCNVector3(1.05, 0.95, 1.05), duration: 0.15),
+                    SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 0.2)
+                ])
+                catRoot.runAction(purrStretch)
+            }
         }
     }
 }

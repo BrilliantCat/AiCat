@@ -4,46 +4,58 @@ import ActivityKit
 @main
 struct AiCatApp: App {
     @StateObject private var speechRecognizer = OfflineSpeechRecognizer.shared
-    @StateObject private var speechSynthesizer = CatSpeechSynthesizer.shared
+    @Environment(\.scenePhase) private var scenePhase
+    
+    init() {
+        createAppDirectories()
+    }
     
     var body: some Scene {
         WindowGroup {
             MainView()
                 .onAppear {
-                    // Запуск разрешений и Dynamic Island с мягкой задержкой после отрисовки экрана
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        speechRecognizer.requestPermissions { _ in }
-                        startDynamicIslandActivity()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        LiveActivityManager.shared.startOrUpdateActivity()
+                        checkBackTapLaunch()
+                    }
+                }
+                .onChange(of: scenePhase) { newPhase in
+                    if newPhase == .active {
+                        checkBackTapLaunch()
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WakeAiCatTriggered"))) { _ in
-                    // Срабатывает при тройном постукивании по крышке телефона
-                    try? speechRecognizer.startListening()
+                    triggerVoiceListening()
                 }
         }
     }
     
-    // Запуск постоянного присутствия котика в Dynamic Island
-    private func startDynamicIslandActivity() {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+    // Создаем папки Models и sd_coreml в Documents, чтобы они были видны в приложении "Файлы"
+    private func createAppDirectories() {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         
-        let initialAttributes = AiCatAttributes(catName: "AiCat")
-        let initialContentState = AiCatAttributes.ContentState(
-            statusMessage: "AiCat онлайн. Живу в A17 Pro.",
-            moodEmoji: "😼",
-            currentAction: "Наблюдаю за тобой",
-            isHanging: false,
-            isListening: false
-        )
+        let modelsDir = docs.appendingPathComponent("Models")
+        let sdDir = modelsDir.appendingPathComponent("sd_coreml")
+        let imagesDir = docs.appendingPathComponent("Images")
         
-        do {
-            _ = try Activity<AiCatAttributes>.request(
-                attributes: initialAttributes,
-                content: .init(state: initialContentState, staleDate: nil),
-                pushType: nil
-            )
-        } catch {
-            print("Ошибка запуска Live Activity: \(error.localizedDescription)")
+        try? fm.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: sdDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+    }
+    
+    private func checkBackTapLaunch() {
+        if UserDefaults.standard.bool(forKey: "startListeningOnLaunch") {
+            UserDefaults.standard.set(false, forKey: "startListeningOnLaunch")
+            triggerVoiceListening()
+        }
+    }
+    
+    private func triggerVoiceListening() {
+        speechRecognizer.requestPermissions { granted in
+            if granted {
+                try? speechRecognizer.startListening()
+            }
         }
     }
 }

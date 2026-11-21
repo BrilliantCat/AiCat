@@ -20,7 +20,7 @@ public struct AiCatHomeScreenWidgetProvider: TimelineProvider {
     }
 
     public func getTimeline(in context: Context, completion: @escaping (Timeline<AiCatHomeScreenEntry>) -> Void) {
-        let entry = AiCatHomeScreenEntry(date: Date(), statusText: "AiCat на страже", moodEmoji: "😼", satiety: 85, happiness: 90)
+        let entry = AiCatHomeScreenEntry(date: Date(), statusText: "AiCat на страже в A17 Pro", moodEmoji: "😼", satiety: 85, happiness: 90)
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(60 * 15)))
         completion(timeline)
     }
@@ -31,76 +31,79 @@ public struct AiCatHomeScreenWidgetView: View {
     @Environment(\.widgetFamily) var family
 
     public var body: some View {
-        ZStack {
-            Color(red: 0.1, green: 0.11, blue: 0.15)
-            
-            if family == .systemSmall {
-                VStack(spacing: 6) {
-                    HStack {
-                        Text("AiCat")
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(.cyan)
-                        Spacer()
-                        Text("🐟 \(entry.satiety)%")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                    }
-                    
-                    Text(entry.moodEmoji)
-                        .font(.system(size: 44))
-                    
-                    Text(entry.statusText)
+        if #available(iOS 17.0, *) {
+            content
+                .containerBackground(Color(red: 0.1, green: 0.11, blue: 0.15), for: .widget)
+        } else {
+            content
+                .background(Color(red: 0.1, green: 0.11, blue: 0.15))
+        }
+    }
+    
+    @ViewBuilder
+    private var content: some View {
+        if family == .systemSmall {
+            VStack(spacing: 6) {
+                HStack {
+                    Text("AiCat")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(.cyan)
+                    Spacer()
+                    Text("🐟 \(entry.satiety)%")
                         .font(.caption2)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                        .foregroundColor(.gray)
                 }
-                .padding(10)
-            } else {
-                // SystemMedium
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text("AiCat")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            Text(entry.moodEmoji)
-                                .font(.title3)
-                        }
-                        Text(entry.statusText)
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 12) {
-                            Text("🐟 Сытость: \(entry.satiety)%")
-                                .font(.caption2)
-                                .foregroundColor(.cyan)
-                            Text("❤️ Счастье: \(entry.happiness)%")
-                                .font(.caption2)
-                                .foregroundColor(.pink)
-                        }
+                
+                Text(entry.moodEmoji)
+                    .font(.system(size: 44))
+                
+                Text(entry.statusText)
+                    .font(.caption2)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .padding(8)
+        } else {
+            // SystemMedium
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("AiCat")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Text(entry.moodEmoji)
+                            .font(.title3)
                     }
+                    Text(entry.statusText)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
                     
                     Spacer()
                     
-                    // Кнопка быстрого вызова
-                    VStack(spacing: 8) {
-                        Image(systemName: "mic.fill")
-                            .font(.title2)
-                            .foregroundColor(.cyan)
-                            .frame(width: 44, height: 44)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Circle())
-                        Text("Сказать")
+                    HStack(spacing: 12) {
+                        Text("🐟 Сытость: \(entry.satiety)%")
                             .font(.caption2)
-                            .foregroundColor(.white)
+                            .foregroundColor(.cyan)
+                        Text("❤️ Счастье: \(entry.happiness)%")
+                            .font(.caption2)
+                            .foregroundColor(.pink)
                     }
                 }
-                .padding(16)
+                
+                Spacer()
+                
+                // Индикатор состояния
+                VStack(spacing: 6) {
+                    Text(entry.moodEmoji)
+                        .font(.system(size: 36))
+                    Text("A17 Pro")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
             }
+            .padding(14)
         }
     }
 }

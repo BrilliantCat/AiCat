@@ -12,7 +12,7 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     override private init() {
         super.init()
         synthesizer.delegate = self
-        setupAudioSession()
+        // Не активируем аудиосессию при старте приложения, чтобы не глушить музыку пользователя (duckOthers)
     }
     
     private func setupAudioSession() {
@@ -56,6 +56,8 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
+        DispatchQueue.main.async { self.isSpeaking = false }
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
     
     private func cleanTextForSpeech(_ text: String) -> String {
@@ -73,5 +75,12 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         DispatchQueue.main.async { self.isSpeaking = false }
+        // Освобождаем аудиосессию, чтобы музыка пользователя восстановила исходную громкость
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+    
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.isSpeaking = false }
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

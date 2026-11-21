@@ -8,6 +8,7 @@ public struct YogaExercise: Identifiable {
     public let instructions: String
 }
 
+@MainActor
 public final class YogaCoachTool: ObservableObject {
     public static let shared = YogaCoachTool()
     
@@ -104,10 +105,12 @@ public final class YogaCoachTool: ObservableObject {
         isSessionActive = false
         timer?.invalidate()
         timer = nil
+        
         CatActionHandler.shared.state.moodEmoji = "😼"
         CatActionHandler.shared.state.statusText = "Йога завершена"
-        let farewell = "Отличная разминка, кожаный! Теперь твоя спина гибка, как у настоящего хищника. Время отдохнуть!"
-        CatSpeechSynthesizer.shared.speak(text: farewell)
-        return farewell
+        
+        let completionText = "Отличная разминка! Тело гибкое, разум спокоен. Время погладить кота!"
+        CatSpeechSynthesizer.shared.speak(text: completionText)
+        return completionText
     }
 }

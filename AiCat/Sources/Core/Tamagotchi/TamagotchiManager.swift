@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 
+@MainActor
 public final class TamagotchiManager: ObservableObject {
     public static let shared = TamagotchiManager()
     
@@ -45,16 +46,5 @@ public final class TamagotchiManager: ObservableObject {
         CatActionHandler.shared.state.moodEmoji = "💤"
         CatActionHandler.shared.state.statusText = "Спит и восстанавливает энергию"
         return "*Свернулся клубком*. Восстанавливаю тактовую частоту нейросети... z-z-z."
-    }
-    
-    // Влияние сытости на характер ответов в промпте
-    public var moodContextPrompt: String {
-        if satiety < 40 {
-            return "ВНИМАНИЕ: Кот сейчас очень голодный (сытость \(satiety)%). Он немного ворчит и требует рыбку 🐟."
-        } else if happiness > 85 {
-            return "Кот очень доволен и сыт (сытость \(satiety)%, счастье \(happiness)%). Он в прекрасном расположении духа и готов шутить."
-        } else {
-            return "Кот в спокойном рабочем состоянии."
-        }
     }
 }

@@ -38,12 +38,18 @@
     <string>AiCat слушает твои команды через микрофон офлайн.</string>
     <key>NSRemindersUsageDescription</key>
     <string>AiCat создает и читает напоминания.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>AiCat создает и читает напоминания для организации твоего расписания.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>AiCat управляет календарем.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>AiCat планирует события в твоем календаре.</string>
     <key>NSCameraUsageDescription</key>
     <string>AiCat использует камеру для анализа фото.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>AiCat редактирует фото по твоим командам.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>AiCat сохраняет созданные изображения в медиатеку Фото.</string>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>

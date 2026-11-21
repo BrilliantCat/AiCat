@@ -8,9 +8,9 @@ public struct MainView: View {
     @StateObject private var fitnessCoach = CatFitnessCoach.shared
     @StateObject private var yogaCoach = YogaCoachTool.shared
     @StateObject private var speechRecognizer = OfflineSpeechRecognizer.shared
+    @ObservedObject private var speechSynthesizer = CatSpeechSynthesizer.shared
     
     @State private var inputText: String = ""
-    @State private var voiceEnabled: Bool = true
     @State private var showCertificateInfo: Bool = false
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
@@ -45,7 +45,12 @@ public struct MainView: View {
                     yogaLiveBanner
                 }
                 
-                // 5. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая 100% экрана)
+                // 5. Предупреждение о микрофоне/речи при наличии ошибки
+                if let err = speechRecognizer.errorMessage {
+                    speechErrorBanner(err)
+                }
+                
+                // 6. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая весь экран под чат)
                 if !isInputFocused {
                     ZStack(alignment: .bottom) {
                         Cat3DSceneView()
@@ -54,15 +59,15 @@ public struct MainView: View {
                         
                         statusBadges
                     }
+                    
+                    // 7. Панель быстрых трюков (скрывается при клавиатуре)
+                    actionChipsBar
                 }
                 
-                // 6. Панель быстрых трюков
-                actionChipsBar
-                
-                // 7. Лента сообщений чата (занимает весь свободный экран)
+                // 8. Лента сообщений чата (занимает всё доступное пространство)
                 messagesScrollView
                 
-                // 8. Поле ввода и микрофон
+                // 9. Поле ввода и микрофон
                 inputBar
             }
         }
@@ -103,7 +108,7 @@ public struct MainView: View {
                     Text(catHandler.state.moodEmoji)
                         .font(.headline)
                 }
-                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "Офлайн A17 Pro (Поиск GGUF)")
+                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "A17 Pro Офлайн ядро")
                     .font(.caption2)
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
             }
@@ -143,10 +148,10 @@ public struct MainView: View {
             
             // Тумблер озвучки голосом
             HStack(spacing: 6) {
-                Image(systemName: voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                    .foregroundColor(voiceEnabled ? .green : .gray)
+                Image(systemName: speechSynthesizer.isVoiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                    .foregroundColor(speechSynthesizer.isVoiceEnabled ? .green : .gray)
                     .font(.caption)
-                Toggle("", isOn: $voiceEnabled)
+                Toggle("", isOn: $speechSynthesizer.isVoiceEnabled)
                     .labelsHidden()
                     .toggleStyle(SwitchToggleStyle(tint: .cyan))
             }
@@ -178,6 +183,17 @@ public struct MainView: View {
             }
             
             Spacer()
+            
+            Button("+1") {
+                fitnessCoach.manualRecordRep()
+            }
+            .font(.caption)
+            .bold()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.cyan.opacity(0.25))
+            .foregroundColor(.cyan)
+            .cornerRadius(10)
             
             Button("Стоп") {
                 fitnessCoach.stopWorkout()
@@ -228,24 +244,27 @@ public struct MainView: View {
             
             Spacer()
             
-            VStack(spacing: 4) {
-                Button("След.") {
-                    yogaCoach.nextPose()
-                }
-                .font(.caption2)
-                .bold()
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.green.opacity(0.3))
-                .foregroundColor(.green)
-                .cornerRadius(8)
-                
-                Button("Стоп") {
-                    _ = yogaCoach.stopWorkout()
-                }
-                .font(.caption2)
-                .foregroundColor(.red)
+            Button("Далее") {
+                yogaCoach.nextPose()
             }
+            .font(.caption)
+            .bold()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.green.opacity(0.25))
+            .foregroundColor(.green)
+            .cornerRadius(10)
+            
+            Button("Стоп") {
+                _ = yogaCoach.stopWorkout()
+            }
+            .font(.caption)
+            .bold()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.red.opacity(0.2))
+            .foregroundColor(.red)
+            .cornerRadius(10)
         }
         .padding(10)
         .background(Color.green.opacity(0.12))
@@ -254,54 +273,67 @@ public struct MainView: View {
         .padding(.vertical, 4)
     }
     
-    private var certificateBanner: some View {
-        HStack(spacing: 8) {
+    private func speechErrorBanner(_ msg: String) -> some View {
+        HStack {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-            Text("Сертификат: \(certificateWatchdog.daysRemaining) дн. Нажми для инфо!")
+                .foregroundColor(.yellow)
+            Text(msg)
                 .font(.caption2)
-                .foregroundColor(.white)
+                .foregroundColor(.yellow)
             Spacer()
-            Button("Инфо") { showCertificateInfo = true }
-                .font(.caption2)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.orange.opacity(0.3))
-                .cornerRadius(8)
+            Button(action: { speechRecognizer.errorMessage = nil }) {
+                Image(systemName: "xmark")
+                    .foregroundColor(.gray)
+                    .font(.caption2)
+            }
         }
         .padding(8)
-        .background(Color.orange.opacity(0.15))
+        .background(Color.yellow.opacity(0.15))
         .cornerRadius(10)
         .padding(.horizontal)
     }
     
-    private var statusBadges: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 12) {
-                Text("🐟 \(tamagotchi.satiety)%")
-                    .font(.caption2)
-                    .foregroundColor(.cyan)
-                Text("❤️ \(tamagotchi.happiness)%")
-                    .font(.caption2)
-                    .foregroundColor(.pink)
-                Text("⚡ \(tamagotchi.energy)%")
-                    .font(.caption2)
+    // MARK: - Certificate Banner
+    
+    private var certificateBanner: some View {
+        Button(action: { showCertificateInfo = true }) {
+            HStack {
+                Image(systemName: "clock.badge.exclamationmark")
                     .foregroundColor(.yellow)
+                Text("Сертификат истекает через \(certificateWatchdog.daysRemaining) дн. (Нажми для инструкции)")
+                    .font(.caption)
+                    .foregroundColor(.white)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-            .background(Color.black.opacity(0.8))
-            .cornerRadius(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.yellow.opacity(0.18))
+            .cornerRadius(10)
+            .padding(.horizontal)
+            .padding(.top, 4)
+        }
+    }
+    
+    // MARK: - Badges
+    
+    private var statusBadges: some View {
+        HStack(spacing: 8) {
+            BadgeView(icon: "fish.fill", text: "\(tamagotchi.satiety)%", color: .cyan)
+            BadgeView(icon: "heart.fill", text: "\(tamagotchi.happiness)%", color: .pink)
+            BadgeView(icon: "bolt.fill", text: "\(tamagotchi.energy)%", color: .yellow)
             
             Text(catHandler.state.statusText)
                 .font(.caption2)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(Color.black.opacity(0.7))
                 .foregroundColor(.white)
-                .cornerRadius(12)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.4))
+                .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
                 )
         }
@@ -317,6 +349,10 @@ public struct MainView: View {
                 }
                 ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
                     let reply = CatFitnessCoach.shared.startPushups()
+                    addCatResponse(reply)
+                }
+                ActionChip(icon: "figure.run", label: "Приседания") {
+                    let reply = CatFitnessCoach.shared.startSquats()
                     addCatResponse(reply)
                 }
                 ActionChip(icon: "fish.fill", label: "Покормить") {
@@ -360,6 +396,7 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.top, 6)
             }
+            .scrollDismissesKeyboard(.interactively)
             .onTapGesture {
                 isInputFocused = false
             }
@@ -368,33 +405,30 @@ public struct MainView: View {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .onChange(of: isInputFocused) { focused in
-                if focused {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        if let last = chatMessages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                        }
-                    }
-                }
-            }
         }
     }
     
+    // MARK: - Input Bar
+    
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            TextField("Скажи или спроси что-нибудь...", text: $inputText)
-                .focused($isInputFocused)
-                .padding(10)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(18)
-                .foregroundColor(.white)
-            
-            if isInputFocused {
-                Button(action: { isInputFocused = false }) {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .foregroundColor(.gray)
+        HStack(spacing: 10) {
+            HStack {
+                TextField("Скажи или спроси что-нибудь...", text: $inputText)
+                    .focused($isInputFocused)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                
+                if !inputText.isEmpty {
+                    Button(action: { inputText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.trailing, 8)
                 }
             }
+            .background(Color.white.opacity(0.08))
+            .cornerRadius(20)
             
             Button(action: { toggleVoiceRecording() }) {
                 Image(systemName: speechRecognizer.isRecording ? "waveform.circle.fill" : "mic.fill")
@@ -405,7 +439,7 @@ public struct MainView: View {
                     .clipShape(Circle())
             }
             
-            if !inputText.trimmingCharacters(in: .whitespaces).isEmpty {
+            if !inputText.isEmpty {
                 Button(action: {
                     let text = inputText
                     inputText = ""
@@ -419,6 +453,7 @@ public struct MainView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .background(Color(red: 0.08, green: 0.09, blue: 0.12))
     }
     
     // MARK: - Logic & AI Chat
@@ -437,15 +472,28 @@ public struct MainView: View {
     }
     
     private func addCatResponse(_ text: String, image: UIImage? = nil) {
+        var savedName: String? = nil
+        if let img = image {
+            let name = "\(UUID().uuidString).jpg"
+            savedName = name
+            DispatchQueue.global(qos: .background).async {
+                if let data = img.jpegData(compressionQuality: 0.85) {
+                    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let target = docs.appendingPathComponent("Images").appendingPathComponent(name)
+                    try? data.write(to: target, options: .atomic)
+                }
+            }
+        }
+        
         let catMsg = ChatMessage(
             sender: .cat,
             text: text,
-            imageData: image?.jpegData(compressionQuality: 0.85)
+            imageFileName: savedName
         )
         chatMessages.append(catMsg)
         ChatStorage.shared.saveMessages(chatMessages)
         
-        if voiceEnabled {
+        if CatSpeechSynthesizer.shared.isVoiceEnabled {
             CatSpeechSynthesizer.shared.speak(text: text)
         }
     }
@@ -457,6 +505,7 @@ public struct MainView: View {
         if speechRecognizer.isRecording {
             speechRecognizer.stopListening()
             let recognized = speechRecognizer.transcribedText
+            inputText = ""
             if !recognized.isEmpty {
                 sendUserQuery(recognized)
             }
@@ -466,13 +515,34 @@ public struct MainView: View {
                     do {
                         try self.speechRecognizer.startListening()
                     } catch {
-                        print("Start listening failed: \(error.localizedDescription)")
+                        print("Error starting recording: \(error)")
                     }
-                } else {
-                    self.addCatResponse("Кожаный, разреши доступ к микрофону и распознаванию речи в Настройках iPhone, чтобы я мог тебя слышать!")
                 }
             }
         }
+    }
+}
+
+// MARK: - Subviews
+
+struct BadgeView: View {
+    let icon: String
+    let text: String
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundColor(color)
+            Text(text)
+                .font(.caption2)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(8)
     }
 }
 
@@ -481,18 +551,29 @@ public struct ChatMessage: Identifiable, Codable {
     public enum Sender: String, Codable { case user, cat }
     public var sender: Sender
     public var text: String
+    public var imageFileName: String?
     public var imageData: Data?
     
-    public init(id: UUID = UUID(), sender: Sender, text: String, imageData: Data? = nil) {
+    public init(id: UUID = UUID(), sender: Sender, text: String, imageFileName: String? = nil, imageData: Data? = nil) {
         self.id = id
         self.sender = sender
         self.text = text
+        self.imageFileName = imageFileName
         self.imageData = imageData
     }
     
     public var image: UIImage? {
-        guard let data = imageData else { return nil }
-        return UIImage(data: data)
+        if let name = imageFileName {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let fileURL = docs.appendingPathComponent("Images").appendingPathComponent(name)
+            if let data = try? Data(contentsOf: fileURL), let img = UIImage(data: data) {
+                return img
+            }
+        }
+        if let data = imageData {
+            return UIImage(data: data)
+        }
+        return nil
     }
 }
 

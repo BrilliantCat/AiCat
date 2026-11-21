@@ -25,9 +25,15 @@ public final class OfflineSpeechRecognizer: ObservableObject {
                 switch authStatus {
                 case .authorized:
                     AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                        DispatchQueue.main.async { completion(granted) }
+                        DispatchQueue.main.async {
+                            if !granted {
+                                self.errorMessage = "Предоставь доступ к микрофону в Настройки -> AiCat"
+                            }
+                            completion(granted)
+                        }
                     }
                 default:
+                    self.errorMessage = "Предоставь доступ к Распознаванию речи в Настройки -> AiCat"
                     completion(false)
                 }
             }
@@ -38,7 +44,9 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         stopListening()
         
         guard let recognizer = speechRecognizer else {
-            throw NSError(domain: "AiCat", code: 1, userInfo: [NSLocalizedDescriptionKey: "Распознавание речи недоступно"])
+            let err = "Распознавание речи недоступно на данном устройстве."
+            DispatchQueue.main.async { self.errorMessage = err }
+            throw NSError(domain: "AiCat", code: 1, userInfo: [NSLocalizedDescriptionKey: err])
         }
         
         let audioSession = AVAudioSession.sharedInstance()
@@ -48,18 +56,16 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let request = recognitionRequest else { return }
         
-        // Используем офлайн, если скачан языковой пакет, иначе стандартный движок
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        // Включаем частичные результаты в реальном времени
         request.shouldReportPartialResults = true
         
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.removeTap(onBus: 0)
+        let busFormat = inputNode.outputFormat(forBus: 0)
+        let format = busFormat.sampleRate > 0 ? busFormat : AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
         
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            self.recognitionRequest?.append(buffer)
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
         }
         
         audioEngine.prepare()
@@ -75,13 +81,18 @@ public final class OfflineSpeechRecognizer: ObservableObject {
             guard let self = self else { return }
             
             if let result = result {
+                let recognized = result.bestTranscription.formattedString
                 DispatchQueue.main.async {
-                    self.transcribedText = result.bestTranscription.formattedString
+                    self.transcribedText = recognized
                 }
             }
             
             if let error = error {
-                print("Speech recognition error: \(error.localizedDescription)")
+                let nsError = error as NSError
+                // Код 216 - нормальная остановка пользователем
+                if nsError.domain != "kAFAssistantErrorDomain" || nsError.code != 216 {
+                    print("Speech recognition warning: \(error.localizedDescription)")
+                }
                 self.stopListening()
             }
             
@@ -105,8 +116,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
             self.isRecording = false
         }
         
-        // Возвращаем аудиосессию в режим громкого воспроизведения кошачьего голоса
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+        // Освобождаем сессию записи
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

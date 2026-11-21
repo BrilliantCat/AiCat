@@ -52,9 +52,30 @@
 ## 🛠️ Сборка и установка на iPhone без Mac
 
 Так как у тебя Windows-компьютер:
-1. Запушь проект в свой GitHub репозиторий.
-2. Вкладка **Actions** на GitHub автоматически запустит облачный Mac (`macos-14`), скомпилирует проект и выдаст файл `AiCat.ipa`.
-3. Скачай `AiCat.ipa` на компьютер.
-4. Установи бесплатную утилиту **Sideloadly** (или **AltStore**) для Windows.
-5. Подключи iPhone 15 Pro по кабелю к ПК, укажи свой бесплатный Apple ID и перетащи `AiCat.ipa` в Sideloadly.
-6. Приложение установится на твой телефон без единого цента за аккаунт разработчика!
+1. Запушь проект в свой GitHub репозиторий (`git push origin main`).
+2. Вкладка **Actions** на GitHub автоматически запустит облачный Mac (`macos-latest`), скомпилирует проект (включая виджет и Dynamic Island) и выдаст готовый артефакт `AiCat.ipa`.
+3. Скачай `AiCat-iOS` из Actions и распакуй `AiCat.ipa`.
+4. Установи бесплатную утилиту **iloader** / **SideStore** / **Sideloadly** для Windows.
+5. Подключи iPhone 15 Pro, укажи свой Apple ID и подпиши `AiCat.ipa`.
+
+---
+
+## 🧠 Как добавить нейросети (Qwen LLM и CoreML Stable Diffusion)
+
+Приложение поддерживает два удобных способа загрузки локальных моделей:
+
+### Способ 1: Прямо через приложение «Файлы» на iPhone (Рекомендуемый)
+1. Открой стандартное приложение **Файлы** на iPhone.
+2. Перейди в раздел **На моем iPhone** -> **AiCat**.
+3. Ты увидишь автоматически созданную папку **Models**.
+4. Положи туда:
+   - Файл языковой модели: `qwen2.5-3b-instruct-q4_k_m.gguf`
+   - Папку CoreML диффузии: `coreml-stable-diffusion-v1-5_split_einsum_compiled` (внутри лежат `TextEncoder.mlmodelc`, `UnetChunk1.mlmodelc`, `UnetChunk2.mlmodelc`, `VAEDecoder.mlmodelc`)
+5. Перезапусти AiCat — индикатор процессора в шапке загорится зеленым, а модели мгновенно активируются!
+
+### Способ 2: Вшить внутрь IPA перед установкой на Windows
+1. Переименуй `AiCat.ipa` в `AiCat.zip` и открой его.
+2. Внутри перейди в папку `Payload/AiCat.app/`.
+3. Создай папку `Models` (если её нет) и скопируй туда `qwen2.5-3b-instruct-q4_k_m.gguf` и папку `coreml-stable-diffusion-v1-5_split_einsum_compiled`.
+4. Переименуй архив обратно в `AiCat.ipa` и установи через iloader / Sideloadly.
+
