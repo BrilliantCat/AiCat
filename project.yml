@@ -20,7 +20,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: AiCat/Sources
-      - path: Assets
+      - path: Assets/Assets.xcassets
     info:
       path: AiCat/Info.plist
       properties:

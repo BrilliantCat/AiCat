@@ -222,7 +222,7 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
             }
-            .onChange(of: chatMessages.count) { _ in
+            .onChange(of: chatMessages.count) {
                 if let last = chatMessages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
@@ -288,7 +288,13 @@ public struct MainView: View {
         let lower = prompt.lowercased()
         
         // Трюки и команды
-        if lower.contains("помойся") || lower.contains("умойся") {
+        if lower.contains("нарисуй") || lower.contains("сгенерируй фото") || lower.contains("картинк") || lower.contains("арт") {
+            var statusMsg = "Генерирую изображение на тему: «\(prompt)» на Neural Engine A17 Pro..."
+            ImageGenerationTool.shared.generateImage(prompt: prompt) { _, res in
+                statusMsg = res
+            }
+            return statusMsg
+        } else if lower.contains("помойся") || lower.contains("умойся") {
             return catHandler.execute(action: "wash")
         } else if lower.contains("кувырок") || lower.contains("сальто") {
             return catHandler.execute(action: "somersault")

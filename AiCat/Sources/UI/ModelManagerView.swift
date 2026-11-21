@@ -13,7 +13,7 @@ public struct ModelManagerView: View {
                 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Карточка текущего состояния
+                        // Карточка текущего состояния мозга
                         VStack(alignment: .leading, spacing: 8) {
                             Text("АКТИВНЫЙ МОЗГ:")
                                 .font(.caption2)
@@ -22,14 +22,14 @@ public struct ModelManagerView: View {
                             HStack {
                                 Image(systemName: "cpu.fill")
                                     .font(.title2)
-                                    .foregroundColor(.cyan)
+                                    .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
                                 VStack(alignment: .leading) {
                                     Text(modelManager.activeModelName)
                                         .font(.headline)
                                         .foregroundColor(.white)
-                                    Text("Работает на Metal A17 Pro (8 GB RAM)")
+                                    Text(modelManager.modelPathInfo)
                                         .font(.caption2)
-                                        .foregroundColor(.green)
+                                        .foregroundColor(.gray)
                                 }
                             }
                         }
@@ -39,30 +39,28 @@ public struct ModelManagerView: View {
                         .cornerRadius(16)
                         .padding(.horizontal)
                         
-                        // Загрузка моделей
-                        Text("Доступные офлайн-модели")
+                        // Каталог офлайн-нейросетей для iPhone 15 Pro
+                        Text("Нейросети для iPhone 15 Pro (Офлайн)")
                             .font(.headline)
                             .foregroundColor(.white)
                             .padding(.horizontal)
                         
-                        ForEach(modelManager.availableModels) { model in
-                            let isInstalled = modelManager.installedModels.contains(model.fileName)
-                            
+                        ForEach(modelManager.catalog) { item in
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(model.name)
+                                        Text(item.name)
                                             .font(.subheadline)
                                             .bold()
                                             .foregroundColor(.white)
-                                        Text("Размер: \(model.sizeText)")
+                                        Text("\(item.typeText) • \(item.sizeText)")
                                             .font(.caption2)
                                             .foregroundColor(.cyan)
                                     }
                                     Spacer()
                                     
-                                    if isInstalled {
-                                        Label("Готова", systemImage: "checkmark.circle.fill")
+                                    if item.id == "llm_qwen3b" && modelManager.isModelLoaded {
+                                        Label("Активна", systemImage: "checkmark.circle.fill")
                                             .font(.caption)
                                             .foregroundColor(.green)
                                             .padding(.horizontal, 10)
@@ -70,10 +68,8 @@ public struct ModelManagerView: View {
                                             .background(Color.green.opacity(0.15))
                                             .cornerRadius(12)
                                     } else {
-                                        Button(action: {
-                                            modelManager.downloadModel(model)
-                                        }) {
-                                            Label("Скачать", systemImage: "arrow.down.circle.fill")
+                                        Link(destination: URL(string: item.downloadURLString)!) {
+                                            Label("Ссылка", systemImage: "arrow.down.circle.fill")
                                                 .font(.caption)
                                                 .foregroundColor(.cyan)
                                                 .padding(.horizontal, 12)
@@ -84,41 +80,26 @@ public struct ModelManagerView: View {
                                     }
                                 }
                                 
-                                Text(model.description)
+                                Text(item.description)
                                     .font(.caption)
                                     .foregroundColor(.gray)
+                                
+                                Text("Путь для файла: \(item.destinationFolder)")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange.opacity(0.8))
                             }
                             .padding()
                             .background(Color.white.opacity(0.05))
                             .cornerRadius(16)
                             .padding(.horizontal)
                         }
-                        
-                        // Подсказка про iTunes / Files
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundColor(.orange)
-                                Text("Свои модели (.gguf)")
-                                    .font(.subheadline)
-                                    .bold()
-                                    .foregroundColor(.white)
-                            }
-                            Text("Ты также можешь скинуть любые свои GGUF-модели напрямую через приложение «Файлы» на iPhone или через кабель с компьютера в папку AiCat/Models.")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding()
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
                     }
                     .padding(.top)
                 }
             }
-            .navigationTitle("Модели ИИ")
+            .navigationTitle("Нейросети AiCat")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(trailing: Button("Закрыть") {
+            .navigationBarItems(trailing: Button("Готово") {
                 presentationMode.wrappedValue.dismiss()
             }.foregroundColor(.cyan))
         }

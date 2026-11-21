@@ -142,12 +142,12 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         let leftW1 = SCNNode(geometry: whiskerGeo)
         leftW1.position = SCNVector3(-0.35, 1.12, 0.42)
-        leftW1.eulerAngles = SCNVector3(0, 0, Float.pi / 2 + 0.1)
+        leftW1.eulerAngles = SCNVector3(0, 0, Float.pi / 2 + Float(0.1))
         catRoot.addChildNode(leftW1)
         
         let rightW1 = SCNNode(geometry: whiskerGeo)
         rightW1.position = SCNVector3(0.35, 1.12, 0.42)
-        rightW1.eulerAngles = SCNVector3(0, 0, Float.pi / 2 - 0.1)
+        rightW1.eulerAngles = SCNVector3(0, 0, Float.pi / 2 - Float(0.1))
         catRoot.addChildNode(rightW1)
         
         // Тело кота (пухлый котик)
@@ -214,7 +214,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             jumpUp.timingMode = .easeOut
             let jumpDown = SCNAction.moveBy(x: 0, y: -0.8, z: 0, duration: 0.35)
             jumpDown.timingMode = .easeIn
-            let spin = SCNAction.rotateBy(x: -CGFloat.pi * 2, y: 0, z: 0, duration: 0.7)
+            let spin = SCNAction.rotateBy(x: -CGFloat(Double.pi * 2), y: 0, z: 0, duration: 0.7)
             
             let jump = SCNAction.sequence([jumpUp, jumpDown])
             cat.runAction(SCNAction.group([jump, spin]))
