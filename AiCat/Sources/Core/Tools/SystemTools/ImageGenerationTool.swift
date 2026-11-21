@@ -163,13 +163,17 @@ public final class ImageGenerationTool: ObservableObject {
             // Тело
             cg.fillEllipse(in: CGRect(x: 280, y: 420, width: 240, height: 260))
             
-            // Очки кота с неоновой каймой
+            // Очки кота с неоновой каймой (через UIBezierPath)
+            let glassesRect = CGRect(x: 320, y: 330, width: 160, height: 45)
+            let glassesPath = UIBezierPath(roundedRect: glassesRect, cornerRadius: 10)
             cg.setFillColor(UIColor.black.cgColor)
-            cg.fillRoundedRect(in: CGRect(x: 320, y: 330, width: 160, height: 45), byRoundingCorners: .allCorners, cornerRadii: CGSize(width: 10, height: 10))
+            cg.addPath(glassesPath.cgPath)
+            cg.fillPath()
             
             cg.setStrokeColor(neonAccent.cgColor)
             cg.setLineWidth(3.0)
-            cg.stroke(CGRect(x: 320, y: 330, width: 160, height: 45))
+            cg.addPath(glassesPath.cgPath)
+            cg.strokePath()
             
             // Неоновый блик на очках
             cg.setFillColor(neonAccent.cgColor)
@@ -188,10 +192,12 @@ public final class ImageGenerationTool: ObservableObject {
             cg.addLine(to: CGPoint(x: 585, y: 395))
             cg.strokePath()
             
-            // 6. Фирменная рамка и подпись
+            // 6. Фирменная рамка и подпись (через UIBezierPath)
             let badgeRect = CGRect(x: 40, y: 720, width: 720, height: 50)
+            let badgePath = UIBezierPath(roundedRect: badgeRect, cornerRadius: 14)
             cg.setFillColor(UIColor.black.withAlphaComponent(0.65).cgColor)
-            cg.fillRoundedRect(in: badgeRect, byRoundingCorners: .allCorners, cornerRadii: CGSize(width: 14, height: 14))
+            cg.addPath(badgePath.cgPath)
+            cg.fillPath()
             
             let label = "🎨 AiCat Offline Neural Render • «\(prompt)»"
             let attrs: [NSAttributedString.Key: Any] = [

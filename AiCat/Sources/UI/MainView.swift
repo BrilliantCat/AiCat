@@ -300,12 +300,12 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.top, 6)
             }
-            .onChange(of: chatMessages.count) {
+            .onChange(of: chatMessages.count) { _ in
                 if let last = chatMessages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
-            .onChange(of: isInputFocused) { _, focused in
+            .onChange(of: isInputFocused) { focused in
                 if focused {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                         if let last = chatMessages.last {

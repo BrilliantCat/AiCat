@@ -177,16 +177,16 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         let whiskerAngles: [Float] = [-0.15, 0.0, 0.15]
         for (i, angle) in whiskerAngles.enumerated() {
-            let yOffset = Float(i) * 0.035
+            let yOffset = Float(i) * Float(0.035)
             
             let lw = SCNNode(geometry: whiskerGeo)
-            lw.position = SCNVector3(-0.35, 1.12 + yOffset, 0.38)
-            lw.eulerAngles = SCNVector3(0, 0, Float.pi / 2 + angle)
+            lw.position = SCNVector3(-0.35, Float(1.12) + yOffset, 0.38)
+            lw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) + angle)
             catRoot.addChildNode(lw)
             
             let rw = SCNNode(geometry: whiskerGeo)
-            rw.position = SCNVector3(0.35, 1.12 + yOffset, 0.38)
-            rw.eulerAngles = SCNVector3(0, 0, Float.pi / 2 - angle)
+            rw.position = SCNVector3(0.35, Float(1.12) + yOffset, 0.38)
+            rw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) - angle)
             catRoot.addChildNode(rw)
         }
         
