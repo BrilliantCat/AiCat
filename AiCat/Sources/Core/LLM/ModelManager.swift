@@ -1,94 +1,53 @@
 import Foundation
 import Combine
 
-public struct AvailableModel: Identifiable {
-    public let id: String
-    public let name: String
-    public let sizeText: String
-    public let description: String
-    public let downloadURL: URL
-    public let fileName: String
-}
-
 public final class ModelManager: ObservableObject {
     public static let shared = ModelManager()
     
-    // Каталог рекомендованных моделей под 8 ГБ RAM iPhone 15 Pro
-    public let availableModels: [AvailableModel] = [
-        AvailableModel(
-            id: "qwen-2.5-3b",
-            name: "Qwen 2.5 3B Instruct (Q4_K_M)",
-            sizeText: "1.9 ГБ",
-            description: "Рекомендуется! Лучший русский язык, логика, юмор и точное выполнение команд.",
-            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf")!,
-            fileName: "qwen2.5-3b-instruct-q4_k_m.gguf"
-        ),
-        AvailableModel(
-            id: "qwen-2.5-1.5b",
-            name: "Qwen 2.5 1.5B Instruct (Q4_K_M)",
-            sizeText: "0.98 ГБ",
-            description: "Ультрабыстрая модель. Моментальные ответы (40+ токенов/сек), легкая нагрузка на батарею.",
-            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!,
-            fileName: "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-        )
-    ]
-    
-    @Published public var installedModels: [String] = []
-    @Published public var downloadProgress: Double = 0.0
-    @Published public var isDownloading: Bool = false
-    @Published public var activeModelName: String = "Не загружена"
-    
-    private var downloadTask: URLSessionDownloadTask?
+    @Published public var isModelLoaded: Bool = false
+    @Published public var activeModelName: String = "Поиск модели..."
+    @Published public var activeModelURL: URL? = nil
+    @Published public var modelPathInfo: String = ""
     
     private init() {
-        scanLocalModels()
+        findAndLoadModel()
     }
     
-    public var modelsDirectory: URL {
+    // Сканирует все возможные места, где может лежать файл qwen2.5-3b-instruct-q4_k_m.gguf
+    public func findAndLoadModel() {
+        let fileName = "qwen2.5-3b-instruct-q4_k_m.gguf"
+        
+        // 1. Проверяем папку Models внутри бандла приложения (куда положил пользователь)
+        let bundleModelsURL = Bundle.main.bundleURL.appendingPathComponent("Models").appendingPathComponent(fileName)
+        let bundleRootURL = Bundle.main.bundleURL.appendingPathComponent(fileName)
+        let bundleResourceURL = Bundle.main.url(forResource: "qwen2.5-3b-instruct-q4_k_m", withExtension: "gguf")
+        
+        // 2. Проверяем папку Documents/Models (куда можно скинуть через приложение Файлы)
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dir = docs.appendingPathComponent("Models")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-    
-    // Сканирует папку приложения (включая файлы, закинутые через кабель / приложение «Файлы»)
-    public func scanLocalModels() {
-        guard let files = try? FileManager.default.contentsOfDirectory(atPath: modelsDirectory.path) else { return }
-        let ggufFiles = files.filter { $0.hasSuffix(".gguf") }
+        let docsModelsURL = docs.appendingPathComponent("Models").appendingPathComponent(fileName)
+        let docsRootURL = docs.appendingPathComponent(fileName)
         
-        DispatchQueue.main.async {
-            self.installedModels = ggufFiles
-            if let first = ggufFiles.first {
-                self.activeModelName = first
-            }
-        }
-    }
-    
-    // Скачивание модели прямо на телефоне в 1 клик
-    public func downloadModel(_ model: AvailableModel) {
-        guard !isDownloading else { return }
+        let candidateURLs = [bundleModelsURL, bundleRootURL, bundleResourceURL, docsModelsURL, docsRootURL].compactMap { $0 }
         
-        isDownloading = true
-        downloadProgress = 0.0
-        
-        let destinationURL = modelsDirectory.appendingPathComponent(model.fileName)
-        
-        let session = URLSession(configuration: .default)
-        downloadTask = session.downloadTask(with: model.downloadURL) { [weak self] tempURL, response, error in
-            guard let self = self, let tempURL = tempURL, error == nil else {
-                DispatchQueue.main.async { self?.isDownloading = false }
+        for url in candidateURLs {
+            if FileManager.default.fileExists(atPath: url.path) {
+                let sizeBytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                let sizeGB = Double(sizeBytes) / (1024 * 1024 * 1024)
+                
+                DispatchQueue.main.async {
+                    self.activeModelURL = url
+                    self.activeModelName = "Qwen 2.5 3B (Офлайн)"
+                    self.isModelLoaded = true
+                    self.modelPathInfo = "Файл найден (\(String(format: "%.2f", sizeGB)) ГБ). Мозг A17 Pro готов к работе!"
+                }
                 return
             }
-            
-            try? FileManager.default.removeItem(at: destinationURL)
-            try? FileManager.default.moveItem(at: tempURL, to: destinationURL)
-            
-            DispatchQueue.main.async {
-                self.isDownloading = false
-                self.scanLocalModels()
-            }
         }
         
-        downloadTask?.resume()
+        DispatchQueue.main.async {
+            self.isModelLoaded = false
+            self.activeModelName = "Модель не найдена в папке"
+            self.modelPathInfo = "Положи файл qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models"
+        }
     }
 }
