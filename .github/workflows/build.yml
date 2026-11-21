@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     name: Build IPA on Cloud macOS
-    runs-on: macos-14 # Apple Silicon M1/M2 runner provided by GitHub Actions for free
+    runs-on: macos-latest # Apple Silicon M1/M2 runner provided by GitHub Actions for free
 
     steps:
       - name: Checkout Code
