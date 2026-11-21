@@ -23,8 +23,25 @@ targets:
       - path: Assets
     info:
       path: AiCat/Info.plist
+      properties:
+        CFBundleDisplayName: "AiCat"
+        CFBundleIdentifier: "com.brilliantcat.aicat"
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSSpeechRecognitionUsageDescription: "AiCat использует речь для офлайн общения с тобой."
+        NSMicrophoneUsageDescription: "AiCat слушает твои команды через микрофон офлайн."
+        NSRemindersUsageDescription: "AiCat создает и читает напоминания."
+        NSCalendarsUsageDescription: "AiCat управляет календарем."
+        NSCameraUsageDescription: "AiCat использует камеру для анализа фото."
+        NSPhotoLibraryUsageDescription: "AiCat редактирует фото по твоим командам."
+        NSSupportsLiveActivities: true
     settings:
       base:
+        GENERATE_INFOPLIST: "NO"
+        INFOPLIST_FILE: "AiCat/Info.plist"
         PRODUCT_BUNDLE_IDENTIFIER: com.brilliantcat.aicat
         PRODUCT_NAME: AiCat
         EXECUTABLE_NAME: AiCat

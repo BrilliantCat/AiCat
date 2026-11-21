@@ -6,15 +6,15 @@ struct AiCatApp: App {
     @StateObject private var speechRecognizer = OfflineSpeechRecognizer.shared
     @StateObject private var speechSynthesizer = CatSpeechSynthesizer.shared
     
-    init() {
-        startDynamicIslandActivity()
-    }
-    
     var body: some Scene {
         WindowGroup {
             MainView()
                 .onAppear {
-                    speechRecognizer.requestPermissions { _ in }
+                    // Запуск разрешений и Dynamic Island с мягкой задержкой после отрисовки экрана
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        speechRecognizer.requestPermissions { _ in }
+                        startDynamicIslandActivity()
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WakeAiCatTriggered"))) { _ in
                     // Срабатывает при тройном постукивании по крышке телефона
