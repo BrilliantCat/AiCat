@@ -8,31 +8,44 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     @Published public var isVoiceEnabled: Bool = true
     
     private let synthesizer = AVSpeechSynthesizer()
-    private var russianVoice: AVSpeechSynthesisVoice?
     
     override private init() {
         super.init()
         synthesizer.delegate = self
-        
-        // Подбираем лучший офлайн русский голос (например, Milena или Yuri)
-        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "ru-RU" }
-        self.russianVoice = voices.first(where: { $0.quality == .enhanced || $0.quality == .premium }) ?? voices.first
+        setupAudioSession()
+    }
+    
+    private func setupAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            // .playback гарантирует звук через динамик ДАЖЕ ЕСЛИ телефон в беззвучном режиме (переключатель Silent Switch)
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("Ошибка настройки AVAudioSession: \(error.localizedDescription)")
+        }
     }
     
     public func speak(text: String) {
         guard isVoiceEnabled else { return }
         
-        // Очищаем текст от технической разметки и JSON, если они просочились
         let cleanedText = cleanTextForSpeech(text)
         guard !cleanedText.isEmpty else { return }
         
         stop()
+        setupAudioSession()
         
         let utterance = AVSpeechUtterance(string: cleanedText)
-        utterance.voice = russianVoice ?? AVSpeechSynthesisVoice(language: "ru-RU")
         
-        // Фирменная интонация кота: чуть ускоренный темп и немного приподнятый питч
-        utterance.rate = 0.52
+        // Подбираем лучший русский голос
+        let ruVoices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.starts(with: "ru") }
+        utterance.voice = ruVoices.first(where: { $0.quality == .enhanced || $0.quality == .premium })
+                       ?? ruVoices.first
+                       ?? AVSpeechSynthesisVoice(language: "ru-RU")
+                       ?? AVSpeechSynthesisVoice(language: "en-US")
+        
+        // Фирменный голос AiCat: энергичный, кошачий, живой
+        utterance.rate = 0.51
         utterance.pitchMultiplier = 1.15
         utterance.volume = 1.0
         
@@ -47,9 +60,10 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     
     private func cleanTextForSpeech(_ text: String) -> String {
         var clean = text
-        // Убираем markdown блоки кода и смайлы при озвучке
+        // Убираем markdown блоки, кавычки и звездочки для чистого звучания
         clean = clean.replacingOccurrences(of: "```[\\s\\S]*?```", with: "", options: .regularExpression)
         clean = clean.replacingOccurrences(of: "\\*([^*]+)\\*", with: "$1", options: .regularExpression)
+        clean = clean.replacingOccurrences(of: "[#_`~]", with: "", options: .regularExpression)
         return clean.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     

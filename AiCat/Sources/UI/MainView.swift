@@ -12,46 +12,53 @@ public struct MainView: View {
     @State private var showCertificateInfo: Bool = false
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
+    @State private var islandCatWalkOffset: CGFloat = -40
+    @State private var islandCatDirection: CGFloat = 1
+    
+    @FocusState private var isInputFocused: Bool
     
     @State private var chatMessages: [ChatMessage] = [
-        ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой 3D-агент в черных очках. Моделирую мысли в чипе A17 Pro. Погладь меня по голове или спроси что угодно!")
+        ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой 3D-агент в черных очках. Моделирую мысли в чипе A17 Pro. Погладь меня по голове, нажми трюки или спроси что угодно!")
     ]
     
     public init() {}
     
     public var body: some View {
         ZStack {
-            Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea()
+            // Фон: темный Apple Dark
+            Color(red: 0.07, green: 0.08, blue: 0.11).ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Header
+                // 1. Dynamic Island Интерактивный кошачий островок
+                dynamicIslandHabitat
+                
+                // 2. Шапка с тумблером голоса и кнопками
                 headerView
                 
-                // Сертификатный баннер, если осталось мало дней
+                // 3. Сертификатный баннер (при необходимости)
                 if certificateWatchdog.needsRenewal {
                     certificateBanner
                 }
                 
-                // Интерактивная 3D-сцена с настоящим котиком (погладить, покрутить)
+                // 4. Интерактивная 3D-сцена с котиком (адаптивная высота при открытии клавиатуры)
                 ZStack(alignment: .bottom) {
                     Cat3DSceneView()
-                        .frame(height: 230)
+                        .frame(height: isInputFocused ? 115 : 220)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isInputFocused)
                     
-                    // Статус сытости, счастья и состояния
                     statusBadges
                 }
                 
-                // Панель быстрых трюков для котика
+                // 5. Панель быстрых трюков
                 actionChipsBar
                 
-                // Лента сообщений чата
+                // 6. Лента сообщений чата
                 messagesScrollView
                 
-                // Поле ввода запроса и микрофон
+                // 7. Поле ввода и микрофон
                 inputBar
             }
         }
-        .scrollDismissesKeyboard(.interactively)
         .sheet(isPresented: $showWardrobe) {
             WardrobeSheet()
         }
@@ -65,22 +72,90 @@ public struct MainView: View {
                 dismissButton: .default(Text("Понятно, сделаю!"))
             )
         }
+        .onAppear {
+            startIslandCatPatrol()
+        }
     }
     
-    // MARK: - Subviews
+    // MARK: - Dynamic Island Habitat
+    
+    private var dynamicIslandHabitat: some View {
+        HStack {
+            Spacer()
+            HStack(spacing: 8) {
+                // Бегающий мини-котик по островку
+                HStack(spacing: 4) {
+                    Text("🐾")
+                        .font(.caption2)
+                        .opacity(0.8)
+                    Text("🐱🕶️")
+                        .font(.subheadline)
+                        .offset(x: islandCatWalkOffset)
+                        .scaleEffect(x: islandCatDirection, y: 1.0)
+                }
+                .onTapGesture {
+                    let reply = catHandler.execute(action: "somersault")
+                    addCatResponse(reply)
+                }
+                
+                Text("AiCat Island")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.cyan)
+                
+                Button(action: {
+                    let reply = catHandler.execute(action: "hang_on_island")
+                    addCatResponse(reply)
+                }) {
+                    Text("Повисни")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.cyan.opacity(0.25))
+                        .foregroundColor(.cyan)
+                        .cornerRadius(8)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.85))
+            .cornerRadius(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.cyan.opacity(0.35), lineWidth: 1)
+            )
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+    
+    private func startIslandCatPatrol() {
+        Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 2.0)) {
+                if islandCatWalkOffset > 25 {
+                    islandCatWalkOffset = -35
+                    islandCatDirection = -1
+                } else {
+                    islandCatWalkOffset = 30
+                    islandCatDirection = 1
+                }
+            }
+        }
+    }
+    
+    // MARK: - Header
     
     private var headerView: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("AiCat")
-                        .font(.title2)
+                        .font(.title3)
                         .bold()
                         .foregroundColor(.white)
                     Text(catHandler.state.moodEmoji)
-                        .font(.title3)
+                        .font(.headline)
                 }
-                Text(modelManager.isModelLoaded ? "Офлайн A17 Pro • Мозг активен" : "Офлайн A17 Pro (Поиск GGUF)")
+                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "Офлайн A17 Pro (Поиск GGUF)")
                     .font(.caption2)
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
             }
@@ -91,16 +166,16 @@ public struct MainView: View {
             Button(action: { showWardrobe = true }) {
                 Image(systemName: "tshirt.fill")
                     .foregroundColor(.cyan)
-                    .padding(8)
+                    .padding(7)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Circle())
             }
             
-            // Модели
+            // Меню моделей
             Button(action: { showModelManager = true }) {
                 Image(systemName: "cpu.fill")
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
-                    .padding(8)
+                    .padding(7)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Circle())
             }
@@ -109,18 +184,18 @@ public struct MainView: View {
             HStack(spacing: 6) {
                 Image(systemName: voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
                     .foregroundColor(voiceEnabled ? .green : .gray)
-                    .font(.footnote)
+                    .font(.caption)
                 Toggle("", isOn: $voiceEnabled)
                     .labelsHidden()
                     .toggleStyle(SwitchToggleStyle(tint: .cyan))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .background(Color.white.opacity(0.08))
-            .cornerRadius(20)
+            .cornerRadius(16)
         }
         .padding(.horizontal)
-        .padding(.top, 10)
+        .padding(.top, 4)
     }
     
     private var certificateBanner: some View {
@@ -145,7 +220,7 @@ public struct MainView: View {
     }
     
     private var statusBadges: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             HStack(spacing: 12) {
                 Text("🐟 \(tamagotchi.satiety)%")
                     .font(.caption2)
@@ -158,28 +233,28 @@ public struct MainView: View {
                     .foregroundColor(.yellow)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
             .background(Color.black.opacity(0.8))
             .cornerRadius(12)
             
             Text(catHandler.state.statusText)
-                .font(.caption)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .font(.caption2)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
                 .background(Color.black.opacity(0.7))
                 .foregroundColor(.white)
-                .cornerRadius(15)
+                .cornerRadius(12)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 15)
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
                 )
         }
-        .padding(.bottom, 6)
+        .padding(.bottom, 4)
     }
     
     private var actionChipsBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ActionChip(icon: "fish.fill", label: "Покормить") {
                     let reply = tamagotchi.feedFish()
                     addCatResponse(reply)
@@ -196,53 +271,73 @@ public struct MainView: View {
                     let reply = catHandler.execute(action: "hang_on_island")
                     addCatResponse(reply)
                 }
+                ActionChip(icon: "paintpalette.fill", label: "Нарисуй арт") {
+                    sendUserQuery("Нарисуй кибер-кота в черных очках в стиле неонового киберпанка")
+                }
                 ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
                     let reply = CatFitnessCoach.shared.startPushups()
                     addCatResponse(reply)
                 }
-                ActionChip(icon: "waveform.badge.magnifyingglass", label: "Вайб-чек") {
-                    let reply = "Слушаю твой голос... Вайб: Ровный, спокойный, уровень стресса всего 22%. Кот одобряет!"
+                ActionChip(icon: "music.note", label: "Музыка") {
+                    let reply = MusicTool.shared.generateBeat(style: "lo-fi")
                     addCatResponse(reply)
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
         }
     }
     
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 10) {
                     ForEach(chatMessages) { msg in
                         MessageBubble(message: msg)
                             .id(msg.id)
                     }
                 }
                 .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.top, 6)
             }
             .onChange(of: chatMessages.count) {
                 if let last = chatMessages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
+            .onChange(of: isInputFocused) { _, focused in
+                if focused {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        if let last = chatMessages.last {
+                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                        }
+                    }
+                }
+            }
         }
     }
     
     private var inputBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             TextField("Скажи или спроси что-нибудь...", text: $inputText)
-                .padding(12)
+                .focused($isInputFocused)
+                .padding(10)
                 .background(Color.white.opacity(0.08))
-                .cornerRadius(20)
+                .cornerRadius(18)
                 .foregroundColor(.white)
+            
+            if isInputFocused {
+                Button(action: { isInputFocused = false }) {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .foregroundColor(.gray)
+                }
+            }
             
             Button(action: { toggleVoiceRecording() }) {
                 Image(systemName: isListening ? "waveform.circle.fill" : "mic.fill")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundColor(isListening ? .red : .cyan)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
@@ -254,84 +349,33 @@ public struct MainView: View {
                     sendUserQuery(text)
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title)
+                        .font(.title2)
                         .foregroundColor(.cyan)
                 }
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
     
-    // MARK: - Logic & AI Chat Generation
+    // MARK: - Logic & AI Chat
     
     private func sendUserQuery(_ text: String) {
         chatMessages.append(ChatMessage(sender: .user, text: text))
         
-        let response = generateIntelligentCatReply(to: text)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            self.addCatResponse(response)
+        Task {
+            let (reply, image) = await LLMEngine.shared.generate(prompt: text)
+            await MainActor.run {
+                self.addCatResponse(reply, image: image)
+            }
         }
     }
     
-    private func addCatResponse(_ text: String) {
-        chatMessages.append(ChatMessage(sender: .cat, text: text))
+    private func addCatResponse(_ text: String, image: UIImage? = nil) {
+        chatMessages.append(ChatMessage(sender: .cat, text: text, image: image))
         
-        // ВСЕГДА ОЗВУЧИВАЕМ ГОЛОСОМ, ЕСЛИ ВКЛЮЧЕН ТУМБЛЕР!
         if voiceEnabled {
             CatSpeechSynthesizer.shared.speak(text: text)
-        }
-    }
-    
-    private func generateIntelligentCatReply(to prompt: String) -> String {
-        let lower = prompt.lowercased()
-        
-        // Трюки и команды
-        if lower.contains("нарисуй") || lower.contains("сгенерируй фото") || lower.contains("картинк") || lower.contains("арт") {
-            var statusMsg = "Генерирую изображение на тему: «\(prompt)» на Neural Engine A17 Pro..."
-            ImageGenerationTool.shared.generateImage(prompt: prompt) { _, res in
-                statusMsg = res
-            }
-            return statusMsg
-        } else if lower.contains("помойся") || lower.contains("умойся") {
-            return catHandler.execute(action: "wash")
-        } else if lower.contains("кувырок") || lower.contains("сальто") {
-            return catHandler.execute(action: "somersault")
-        } else if lower.contains("повисни") || lower.contains("лапк") {
-            return catHandler.execute(action: "hang_on_island")
-        } else if lower.contains("покорми") || lower.contains("рыбк") {
-            return tamagotchi.feedFish()
-        } else if lower.contains("погладь") {
-            return tamagotchi.petCat()
-        } else if lower.contains("отжима") {
-            return CatFitnessCoach.shared.startPushups()
-        } else if lower.contains("присед") {
-            return CatFitnessCoach.shared.startSquats()
-        } else if lower.contains("йог") || lower.contains("размин") {
-            return YogaCoachTool.shared.startWorkout()
-        } else if lower.contains("музык") || lower.contains("бит") {
-            return MusicTool.shared.generateBeat(style: "lo-fi")
-        } else if lower.contains("вайб") || lower.contains("настроен") {
-            let res = VoiceVibeTool.shared.analyzeVibe(transcribedText: prompt)
-            return res.catAdvice
-        } else if lower.contains("план") || lower.contains("сегодня") {
-            return "Твои дела под контролем! Я заглянул в локальные задачи: на сегодня у тебя отличный день, главное — не забывай поиграть со мной."
-        } else if lower.contains("привет") || lower.contains("здравствуй") {
-            return "Мяу! Здорово, кожаный. Я в черных очках, бодр и готов к великим делам. Чем займемся?"
-        } else if lower.contains("кто ты") {
-            return "Я AiCat — твой персональный автономный 3D-агент. Живу прямо в чипе A17 Pro твоего iPhone 15 Pro, ни грамма данных в облака не отправляю."
-        } else if lower.contains("как дела") {
-            return "Мурчу от удовольствия! Сытость \(tamagotchi.satiety)%, счастье \(tamagotchi.happiness)%. Готов служить тебе верой и правдой."
-        } else if lower.contains("скажи что") || lower.contains("расскажи") {
-            let jokes = [
-                "Знаешь, почему коты — лучшие ИИ? Мы грациозны, умны и требуем только рыбку вместо подписки за $20 в месяц!",
-                "Я внимательно наблюдал за тобой из Dynamic Island: ты слишком много работаешь. Пора сделать перерыв и погладить меня по голове!",
-                "Мой процессор A17 Pro разогрет, лапы готовы к действию. Спрашивай что угодно, я разберусь!"
-            ]
-            return jokes.randomElement() ?? jokes[0]
-        } else {
-            return "Услышал тебя, кожаный: «\(prompt)». Моделирую ответ на чипе A17 Pro. Твоя мысль интересная, я записал её в локальный журнал!"
         }
     }
     
@@ -339,6 +383,16 @@ public struct MainView: View {
         isListening.toggle()
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
+        
+        if isListening {
+            try? OfflineSpeechRecognizer.shared.startListening()
+        } else {
+            OfflineSpeechRecognizer.shared.stopListening()
+            let recognized = OfflineSpeechRecognizer.shared.transcribedText
+            if !recognized.isEmpty {
+                sendUserQuery(recognized)
+            }
+        }
     }
 }
 
@@ -347,6 +401,13 @@ public struct ChatMessage: Identifiable {
     public enum Sender { case user, cat }
     public let sender: Sender
     public let text: String
+    public var image: UIImage? = nil
+    
+    public init(sender: Sender, text: String, image: UIImage? = nil) {
+        self.sender = sender
+        self.text = text
+        self.image = image
+    }
 }
 
 struct MessageBubble: View {
@@ -356,17 +417,39 @@ struct MessageBubble: View {
         HStack {
             if message.sender == .user { Spacer() }
             
-            Text(message.text)
-                .font(.body)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .foregroundColor(.white)
-                .background(
-                    message.sender == .user ?
-                    Color.cyan.opacity(0.3) :
-                    Color.white.opacity(0.12)
-                )
-                .cornerRadius(16)
+            VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
+                Text(message.text)
+                    .font(.body)
+                    .foregroundColor(.white)
+                
+                if let img = message.image {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 240, maxHeight: 240)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
+                        )
+                    
+                    Button(action: {
+                        UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
+                    }) {
+                        Label("Сохранить в Фото", systemImage: "square.and.arrow.down")
+                            .font(.caption2)
+                            .foregroundColor(.cyan)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                message.sender == .user ?
+                Color.cyan.opacity(0.28) :
+                Color.white.opacity(0.11)
+            )
+            .cornerRadius(16)
             
             if message.sender == .cat { Spacer() }
         }
@@ -387,11 +470,11 @@ struct ActionChip: View {
                     .font(.caption)
                     .bold()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.cyan.opacity(0.2))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.cyan.opacity(0.18))
             .foregroundColor(.cyan)
-            .cornerRadius(16)
+            .cornerRadius(14)
         }
     }
 }

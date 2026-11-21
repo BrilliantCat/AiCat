@@ -18,9 +18,11 @@ public final class ModelManager: ObservableObject {
     @Published public var activeModelName: String = "Поиск модели..."
     @Published public var activeModelURL: URL? = nil
     @Published public var modelPathInfo: String = ""
-    @Published public var isDiffusionLoaded: Bool = false
+    @Published public var ggufMetadata: GGUFMetadata? = nil
     
-    // Каталог двух ключевых моделей (Языковая + Графическая)
+    @Published public var isDiffusionLoaded: Bool = false
+    @Published public var diffusionPathInfo: String = ""
+    
     public let catalog: [ModelCatalogItem] = [
         ModelCatalogItem(
             id: "llm_qwen3b",
@@ -37,38 +39,50 @@ public final class ModelManager: ObservableObject {
             typeText: "🎨 Генератор изображений",
             sizeText: "2.1 ГБ",
             description: "Рисование фото и артов по тексту с нуля на Neural Engine A17 Pro.",
-            downloadURLString: "https://huggingface.co/apple/coreml-stable-diffusion-v1-5/resolve/main/coreml-stable-diffusion-v1-5_split-einsum_compiled.zip",
+            downloadURLString: "https://huggingface.co/pcuenq/coreml-stable-diffusion-v1-5/resolve/main/coreml-stable-diffusion-v1-5_split_einsum_compiled.zip",
             destinationFolder: "Models/sd_coreml"
         )
     ]
     
     private init() {
         findAndLoadModel()
+        findAndLoadDiffusionModel()
     }
     
     public func findAndLoadModel() {
-        let fileName = "qwen2.5-3b-instruct-q4_k_m.gguf"
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let bundle = Bundle.main.bundleURL
         
-        let bundleModelsURL = Bundle.main.bundleURL.appendingPathComponent("Models").appendingPathComponent(fileName)
-        let bundleRootURL = Bundle.main.bundleURL.appendingPathComponent(fileName)
-        let bundleResourceURL = Bundle.main.url(forResource: "qwen2.5-3b-instruct-q4_k_m", withExtension: "gguf")
+        // 1. Проверяем стандартные пути
+        let targetFileName = "qwen2.5-3b-instruct-q4_k_m.gguf"
+        var candidateURLs: [URL] = [
+            docs.appendingPathComponent("Models").appendingPathComponent(targetFileName),
+            docs.appendingPathComponent(targetFileName),
+            bundle.appendingPathComponent("Models").appendingPathComponent(targetFileName),
+            bundle.appendingPathComponent(targetFileName)
+        ]
         
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let docsModelsURL = docs.appendingPathComponent("Models").appendingPathComponent(fileName)
-        let docsRootURL = docs.appendingPathComponent(fileName)
-        
-        let candidateURLs = [bundleModelsURL, bundleRootURL, bundleResourceURL, docsModelsURL, docsRootURL].compactMap { $0 }
+        // 2. Дополнительно ищем любой .gguf файл в Documents и подпапках
+        if let enumerator = fm.enumerator(at: docs, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+            for case let fileURL as URL in enumerator {
+                if fileURL.pathExtension.lowercased() == "gguf" && !candidateURLs.contains(fileURL) {
+                    candidateURLs.append(fileURL)
+                }
+            }
+        }
         
         for url in candidateURLs {
-            if FileManager.default.fileExists(atPath: url.path) {
-                let sizeBytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
-                let sizeGB = Double(sizeBytes) / (1024 * 1024 * 1024)
+            if fm.fileExists(atPath: url.path) {
+                let meta = GGUFReader.inspect(fileURL: url)
+                let sizeGB = meta?.fileSizeGB ?? 1.93
                 
                 DispatchQueue.main.async {
                     self.activeModelURL = url
-                    self.activeModelName = "Qwen 2.5 3B (Офлайн)"
+                    self.activeModelName = meta?.architecture ?? "Qwen 2.5 3B (GGUF)"
                     self.isModelLoaded = true
-                    self.modelPathInfo = "Файл найден (\(String(format: "%.2f", sizeGB)) ГБ). Мозг A17 Pro готов к работе!"
+                    self.ggufMetadata = meta
+                    self.modelPathInfo = "Файл: \(url.lastPathComponent) (\(String(format: "%.2f", sizeGB)) ГБ). Мозг активен на A17 Pro!"
                 }
                 return
             }
@@ -77,7 +91,36 @@ public final class ModelManager: ObservableObject {
         DispatchQueue.main.async {
             self.isModelLoaded = false
             self.activeModelName = "Модель не найдена в папке"
-            self.modelPathInfo = "Положи файл qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models"
+            self.modelPathInfo = "Положи файл qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models или открой в 'Файлы' на iPhone"
+        }
+    }
+    
+    public func findAndLoadDiffusionModel() {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let bundle = Bundle.main.bundleURL
+        
+        let candidateDirs: [URL] = [
+            docs.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
+            docs.appendingPathComponent("sd_coreml"),
+            bundle.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
+            docs.appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled")
+        ]
+        
+        for dir in candidateDirs {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue {
+                DispatchQueue.main.async {
+                    self.isDiffusionLoaded = true
+                    self.diffusionPathInfo = "CoreML Stable Diffusion найдена в \(dir.lastPathComponent)! Готова к нейрогенерации."
+                }
+                return
+            }
+        }
+        
+        DispatchQueue.main.async {
+            self.isDiffusionLoaded = false
+            self.diffusionPathInfo = "Модель CoreML SD 1.5 не найдена. Работает встроенный генератор арт-концептов."
         }
     }
 }

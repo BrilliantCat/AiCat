@@ -19,6 +19,7 @@ public struct CatActionState: Codable, Equatable {
     public var isHanging: Bool
     public var moodEmoji: String
     public var statusText: String
+    public var executionToken: String
     
     public static let `default` = CatActionState(
         currentAction: .idle,
@@ -26,7 +27,8 @@ public struct CatActionState: Codable, Equatable {
         currentOutfit: "Черные кибер-очки",
         isHanging: false,
         moodEmoji: "😼",
-        statusText: "Наблюдаю за тобой из островка"
+        statusText: "Наблюдаю за тобой из островка",
+        executionToken: UUID().uuidString
     )
 }
 
@@ -42,30 +44,36 @@ public final class CatActionHandler: ObservableObject {
             return "Кот с недоумением посмотрел на тебя: 'Такую команду я пока не выучил'."
         }
         
+        let token = UUID().uuidString
+        
         switch actionType {
         case .hangOnIsland:
             state.currentAction = .hangOnIsland
             state.isHanging = true
             state.moodEmoji = "🐾"
             state.statusText = "Повис на лапках под Dynamic Island!"
+            state.executionToken = token
             return "Ухватился когтями за нижнюю грань островка. Вишу, любуюсь твоими обоями!"
             
         case .wash:
             state.currentAction = .wash
             state.moodEmoji = "👅"
             state.statusText = "Умывается лапкой"
-            return "*Вылизывает переднюю лапу и аккуратно протирает ухо*. Гигиена — залог идеального ИИ."
+            state.executionToken = token
+            return "*Вылизывает переднюю лапку и аккуратно протирает ушко*. Чистота — залог идеального ИИ."
             
         case .somersault:
             state.currentAction = .somersault
             state.moodEmoji = "🤸‍♂️"
             state.statusText = "Крутит сальто в невесомости"
-            return "*Сделал грациозное тройное сальто назад и приземлился на все четыре лапы*. Десять из десяти!"
+            state.executionToken = token
+            return "*Сделал грациозное сальто назад и приземлился на все четыре лапы*. Десять из десяти!"
             
         case .play:
             state.currentAction = .play
             state.moodEmoji = "🧶"
             state.statusText = "Гоняет цифровой клубок"
+            state.executionToken = token
             return "*Поймал виртуальный лазерный луч лапой*. Ладно, признаю, это было весело."
             
         case .dressUp:
@@ -75,6 +83,7 @@ public final class CatActionHandler: ObservableObject {
             state.currentAction = .dressUp
             state.moodEmoji = "🕶️"
             state.statusText = "Одет с иголочки (\(outfit))"
+            state.executionToken = token
             return "Приоделся! \(outfit) сидит идеально. Теперь я самый стильный агент в твоем телефоне."
             
         case .takeOff:
@@ -83,24 +92,27 @@ public final class CatActionHandler: ObservableObject {
             state.currentAction = .takeOff
             state.moodEmoji = "😸"
             state.statusText = "Натуральная шерсть"
+            state.executionToken = token
             return "Скинул гардероб, остался в естественной шубке. Так дышится свободнее."
             
         case .sleep:
             state.currentAction = .sleep
             state.moodEmoji = "💤"
             state.statusText = "Спит и сладко посапывает"
-            return "*Свернулся калачиком на Dynamic Island и тихо замурлыкал*. Разбуди тройным стуком, если что."
+            state.executionToken = token
+            return "*Свернулся калачиком на Dynamic Island и тихо замурлыкал*. Разбуди меня стуком по экрану."
             
         case .wake:
             state.currentAction = .idle
             state.moodEmoji = "😼"
             state.statusText = "Бодр и готов к задачам"
+            state.executionToken = token
             return "*Потянулся, зевнул и поправил очки*. Я на связи, кожаный. Что делаем?"
             
         case .idle:
             state.currentAction = .idle
-            state.statusText = "Наблюдает"
-            return "Готов к командам."
+            state.executionToken = token
+            return "Мяу! Жду твоих команд."
         }
     }
 }
