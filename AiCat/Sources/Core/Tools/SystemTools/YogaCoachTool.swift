@@ -55,6 +55,9 @@ public final class YogaCoachTool: ObservableObject {
         CatActionHandler.shared.state.moodEmoji = "🧘‍♂️"
         CatActionHandler.shared.state.statusText = "Тренирует тебя: «\(first.name)»"
         
+        // Включаем медитативный Lo-Fi для йоги
+        _ = MusicTool.shared.generateBeat(style: "lo-fi")
+        
         return "Включаю режим кошачьего фитнес-тренера! Первое упражнение: «\(first.name)». \(first.catComment)"
     }
     

@@ -70,7 +70,10 @@ public final class CatFitnessCoach: ObservableObject {
         CatActionHandler.shared.state.moodEmoji = "💪"
         CatActionHandler.shared.state.statusText = "Считает твои отжимания"
         
-        return "Положи iPhone на пол под грудь экраном вверх! Начинай отжиматься — я сам считаю каждое касание. Цель: 15 раз. Погнали!"
+        // Включаем фоновый энергичный бит через MusicTool
+        _ = MusicTool.shared.generateBeat(style: "cyberpunk")
+        
+        return "Положи iPhone на пол под грудь экраном вверх! Начинай отжиматься — я сам считаю каждое касание. Врубаю бодрый бит. Цель: 15 раз. Погнали!"
     }
     
     // Запуск приседаний (с отслеживанием через акселерометр)
@@ -84,6 +87,9 @@ public final class CatFitnessCoach: ObservableObject {
         
         CatActionHandler.shared.state.moodEmoji = "🐯"
         CatActionHandler.shared.state.statusText = "Считает приседания"
+        
+        // Включаем бодрый ритм для приседаний
+        _ = MusicTool.shared.generateBeat(style: "8-bit")
         
         return "Держи телефон в руке или положи в карман. Начинай глубокие приседания — датчики A17 Pro зафиксируют каждое движение!"
     }
