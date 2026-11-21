@@ -15,8 +15,8 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     
     private init() {
-        // Русский язык для распознавания речи
-        self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU"))
+        // Подбираем русский распознаватель речи
+        self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU")) ?? SFSpeechRecognizer()
     }
     
     public func requestPermissions(completion: @escaping (Bool) -> Void) {
@@ -37,7 +37,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     public func startListening() throws {
         stopListening()
         
-        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+        guard let recognizer = speechRecognizer else {
             throw NSError(domain: "AiCat", code: 1, userInfo: [NSLocalizedDescriptionKey: "Распознавание речи недоступно"])
         }
         
@@ -48,12 +48,15 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let request = recognitionRequest else { return }
         
-        // КЛЮЧЕВОЕ: Требуем строго офлайн-обработку на чипе A17 Pro (zero internet)
-        request.requiresOnDeviceRecognition = true
+        // Используем офлайн, если скачан языковой пакет, иначе стандартный движок
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        }
         request.shouldReportPartialResults = true
         
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.removeTap(onBus: 0)
         
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
             self.recognitionRequest?.append(buffer)
@@ -62,17 +65,27 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         audioEngine.prepare()
         try audioEngine.start()
         
-        isRecording = true
-        transcribedText = ""
+        DispatchQueue.main.async {
+            self.isRecording = true
+            self.transcribedText = ""
+            self.errorMessage = nil
+        }
         
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
+            
             if let result = result {
                 DispatchQueue.main.async {
                     self.transcribedText = result.bestTranscription.formattedString
                 }
             }
-            if error != nil || (result?.isFinal ?? false) {
+            
+            if let error = error {
+                print("Speech recognition error: \(error.localizedDescription)")
+                self.stopListening()
+            }
+            
+            if result?.isFinal ?? false {
                 self.stopListening()
             }
         }
@@ -91,5 +104,9 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         DispatchQueue.main.async {
             self.isRecording = false
         }
+        
+        // Возвращаем аудиосессию в режим громкого воспроизведения кошачьего голоса
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try? AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
     }
 }

@@ -13,38 +13,45 @@ public final class YogaCoachTool: ObservableObject {
     
     @Published public var isSessionActive: Bool = false
     @Published public var currentExerciseIndex: Int = 0
-    @Published public var remainingSeconds: Int = 0
+    @Published public var remainingSeconds: Int = 30
     
     public let routine: [YogaExercise] = [
         YogaExercise(
             name: "Поза Марджариасана («Кошачья спина»)",
             durationSeconds: 30,
-            catComment: "Вставай на четвереньки и выгибай спину дугой, как я, когда вижу пылесос! Вдох — прогиб, выдох — спина вверх.",
+            catComment: "Вставай на четвереньки и выгибай спину дугой! Вдох — мягкий прогиб, выдох — спина вверх.",
             instructions: "Мягкое вытяжение позвоночника и снятие зажимов после долгого сидения."
         ),
         YogaExercise(
             name: "Кошачьи потягивания («Лапки вперед»)",
             durationSeconds: 30,
-            catComment: "Тяни руки вперед, грудь к полу. Представь, что тянешься за самой вкусной сосиской на столе!",
+            catComment: "Тяни руки вперед, грудь к полу. Представь, что тянешься за самой вкусной рыбкой на столе!",
             instructions: "Раскрытие плечевых суставов и грудной клетки."
         ),
         YogaExercise(
             name: "Королевская планка с котом",
             durationSeconds: 45,
-            catComment: "Стоим в планке! Не провисай, держи корпус! Я сижу у тебя на спине и внимательно слежу за техникой.",
-            instructions: "Укрепление мышц кора и пресса."
+            catComment: "Держи планку! Я сижу у тебя между лопаток. Не провисай, держи спину ровно!",
+            instructions: "Укрепление мышц кора, пресса и рук."
         ),
         YogaExercise(
             name: "Скрутка на коврике («Свернуться калачиком»)",
             durationSeconds: 30,
             catComment: "Ложись на спину, колени к груди. Расслабься и сделай глубокий выдох. Можешь даже помурчать.",
-            instructions: "Мягкий релакс и снятие усталости."
+            instructions: "Полный релакс и снятие усталости."
         )
     ]
     
     private var timer: Timer?
     
     private init() {}
+    
+    public var currentExercise: YogaExercise {
+        if currentExerciseIndex < routine.count {
+            return routine[currentExerciseIndex]
+        }
+        return routine[0]
+    }
     
     public func startWorkout() -> String {
         isSessionActive = true
@@ -53,12 +60,44 @@ public final class YogaCoachTool: ObservableObject {
         remainingSeconds = first.durationSeconds
         
         CatActionHandler.shared.state.moodEmoji = "🧘‍♂️"
-        CatActionHandler.shared.state.statusText = "Тренирует тебя: «\(first.name)»"
+        CatActionHandler.shared.state.statusText = "Йога: «\(first.name)»"
         
-        // Включаем медитативный Lo-Fi для йоги
+        startTimer()
+        
+        // Включаем медитативный Lo-Fi
         _ = MusicTool.shared.generateBeat(style: "lo-fi")
         
-        return "Включаю режим кошачьего фитнес-тренера! Первое упражнение: «\(first.name)». \(first.catComment)"
+        let intro = "Начинаем кошачью йогу! Первое упражнение: «\(first.name)». \(first.catComment)"
+        CatSpeechSynthesizer.shared.speak(text: intro)
+        return intro
+    }
+    
+    public func nextPose() {
+        if currentExerciseIndex + 1 < routine.count {
+            currentExerciseIndex += 1
+            let next = routine[currentExerciseIndex]
+            remainingSeconds = next.durationSeconds
+            CatActionHandler.shared.state.statusText = "Йога: «\(next.name)»"
+            CatSpeechSynthesizer.shared.speak(text: "Следующая поза: «\(next.name)». \(next.catComment)")
+        } else {
+            _ = stopWorkout()
+        }
+    }
+    
+    private func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, self.isSessionActive else { return }
+            
+            if self.remainingSeconds > 1 {
+                self.remainingSeconds -= 1
+                if self.remainingSeconds == 10 {
+                    CatSpeechSynthesizer.shared.speak(text: "Осталось 10 секунд, держись!")
+                }
+            } else {
+                self.nextPose()
+            }
+        }
     }
     
     public func stopWorkout() -> String {
@@ -66,7 +105,9 @@ public final class YogaCoachTool: ObservableObject {
         timer?.invalidate()
         timer = nil
         CatActionHandler.shared.state.moodEmoji = "😼"
-        CatActionHandler.shared.state.statusText = "Тренировка завершена"
-        return "Отличная разминка, кожаный! Теперь твоя спина гибка, как у настоящего хищника. Время отдохнуть!"
+        CatActionHandler.shared.state.statusText = "Йога завершена"
+        let farewell = "Отличная разминка, кожаный! Теперь твоя спина гибка, как у настоящего хищника. Время отдохнуть!"
+        CatSpeechSynthesizer.shared.speak(text: farewell)
+        return farewell
     }
 }

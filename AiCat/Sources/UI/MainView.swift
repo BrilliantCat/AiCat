@@ -6,10 +6,11 @@ public struct MainView: View {
     @StateObject private var modelManager = ModelManager.shared
     @StateObject private var certificateWatchdog = CertificateWatchdog.shared
     @StateObject private var fitnessCoach = CatFitnessCoach.shared
+    @StateObject private var yogaCoach = YogaCoachTool.shared
+    @StateObject private var speechRecognizer = OfflineSpeechRecognizer.shared
     
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
-    @State private var isListening: Bool = false
     @State private var showCertificateInfo: Bool = false
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
@@ -29,17 +30,22 @@ public struct MainView: View {
                 // 1. Верхняя панель управления
                 headerView
                 
-                // 2. Сертификатный баннер (если осталось мало дней)
+                // 2. Сертификатный баннер
                 if certificateWatchdog.needsRenewal {
                     certificateBanner
                 }
                 
-                // 3. Фитнес-панель (появляется только во время тренировки)
+                // 3. Фитнес-панель (Отжимания / Приседания)
                 if fitnessCoach.isWorkoutActive {
                     workoutLiveBanner
                 }
                 
-                // 4. Интерактивная 3D-сцена с котиком (плавно сворачивается в компактный аватар при наборе текста)
+                // 4. Панель йоги (при активной сессии)
+                if yogaCoach.isSessionActive {
+                    yogaLiveBanner
+                }
+                
+                // 5. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая 100% экрана)
                 if !isInputFocused {
                     ZStack(alignment: .bottom) {
                         Cat3DSceneView()
@@ -50,13 +56,13 @@ public struct MainView: View {
                     }
                 }
                 
-                // 5. Панель быстрых трюков
+                // 6. Панель быстрых трюков
                 actionChipsBar
                 
-                // 6. Лента сообщений чата (занимает весь свободный экран)
+                // 7. Лента сообщений чата (занимает весь свободный экран)
                 messagesScrollView
                 
-                // 7. Поле ввода и микрофон
+                // 8. Поле ввода и микрофон
                 inputBar
             }
         }
@@ -75,8 +81,12 @@ public struct MainView: View {
             )
         }
         .onAppear {
-            // Загружаем сохраненную историю диалога
             self.chatMessages = ChatStorage.shared.loadMessages()
+        }
+        .onChange(of: speechRecognizer.transcribedText) { newText in
+            if speechRecognizer.isRecording && !newText.isEmpty {
+                self.inputText = newText
+            }
         }
     }
     
@@ -100,7 +110,7 @@ public struct MainView: View {
             
             Spacer()
             
-            // Очистка чата
+            // Очистка истории переписки
             Button(action: {
                 ChatStorage.shared.clear()
                 chatMessages = ChatStorage.shared.loadMessages()
@@ -187,6 +197,63 @@ public struct MainView: View {
         .padding(.vertical, 4)
     }
     
+    // MARK: - Yoga Live HUD
+    
+    private var yogaLiveBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "figure.mind.and.body")
+                .font(.title2)
+                .foregroundColor(.green)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(yogaCoach.currentExercise.name)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(.white)
+                    Text("⏱️ \(yogaCoach.remainingSeconds)с")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(6)
+                }
+                Text(yogaCoach.currentExercise.catComment)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 4) {
+                Button("След.") {
+                    yogaCoach.nextPose()
+                }
+                .font(.caption2)
+                .bold()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.3))
+                .foregroundColor(.green)
+                .cornerRadius(8)
+                
+                Button("Стоп") {
+                    _ = yogaCoach.stopWorkout()
+                }
+                .font(.caption2)
+                .foregroundColor(.red)
+            }
+        }
+        .padding(10)
+        .background(Color.green.opacity(0.12))
+        .cornerRadius(14)
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+    }
+    
     private var certificateBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -244,6 +311,14 @@ public struct MainView: View {
     private var actionChipsBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                ActionChip(icon: "figure.mind.and.body", label: "Йога") {
+                    let reply = yogaCoach.startWorkout()
+                    addCatResponse(reply)
+                }
+                ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
+                    let reply = CatFitnessCoach.shared.startPushups()
+                    addCatResponse(reply)
+                }
                 ActionChip(icon: "fish.fill", label: "Покормить") {
                     let reply = tamagotchi.feedFish()
                     addCatResponse(reply)
@@ -262,10 +337,6 @@ public struct MainView: View {
                 }
                 ActionChip(icon: "paintpalette.fill", label: "Нарисуй арт") {
                     sendUserQuery("Нарисуй неоновый киберпанк город с летающими машинами")
-                }
-                ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
-                    let reply = CatFitnessCoach.shared.startPushups()
-                    addCatResponse(reply)
                 }
                 ActionChip(icon: "music.note", label: "Музыка") {
                     let reply = MusicTool.shared.generateBeat(style: "lo-fi")
@@ -326,9 +397,9 @@ public struct MainView: View {
             }
             
             Button(action: { toggleVoiceRecording() }) {
-                Image(systemName: isListening ? "waveform.circle.fill" : "mic.fill")
+                Image(systemName: speechRecognizer.isRecording ? "waveform.circle.fill" : "mic.fill")
                     .font(.title3)
-                    .foregroundColor(isListening ? .red : .cyan)
+                    .foregroundColor(speechRecognizer.isRecording ? .red : .cyan)
                     .frame(width: 40, height: 40)
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
@@ -380,17 +451,26 @@ public struct MainView: View {
     }
     
     private func toggleVoiceRecording() {
-        isListening.toggle()
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
-        if isListening {
-            try? OfflineSpeechRecognizer.shared.startListening()
-        } else {
-            OfflineSpeechRecognizer.shared.stopListening()
-            let recognized = OfflineSpeechRecognizer.shared.transcribedText
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopListening()
+            let recognized = speechRecognizer.transcribedText
             if !recognized.isEmpty {
                 sendUserQuery(recognized)
+            }
+        } else {
+            speechRecognizer.requestPermissions { granted in
+                if granted {
+                    do {
+                        try self.speechRecognizer.startListening()
+                    } catch {
+                        print("Start listening failed: \(error.localizedDescription)")
+                    }
+                } else {
+                    self.addCatResponse("Кожаный, разреши доступ к микрофону и распознаванию речи в Настройках iPhone, чтобы я мог тебя слышать!")
+                }
             }
         }
     }
