@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct MainView: View {
     @StateObject private var catHandler = CatActionHandler.shared
+    @StateObject private var tamagotchi = TamagotchiManager.shared
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
     @State private var isListening: Bool = false
@@ -78,23 +79,45 @@ public struct MainView: View {
                         .frame(height: 250)
                     
                     // Бейдж статуса
-                    Text(catHandler.state.statusText)
-                        .font(.caption)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(15)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 15)
-                                .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
-                        )
-                        .padding(.bottom, 8)
+                    VStack(spacing: 6) {
+                        HStack(spacing: 12) {
+                            Text("🐟 \(tamagotchi.satiety)%")
+                                .font(.caption2)
+                                .foregroundColor(.cyan)
+                            Text("❤️ \(tamagotchi.happiness)%")
+                                .font(.caption2)
+                                .foregroundColor(.pink)
+                            Text("⚡ \(tamagotchi.energy)%")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(12)
+                        
+                        Text(catHandler.state.statusText)
+                            .font(.caption)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.7))
+                            .foregroundColor(.white)
+                            .cornerRadius(15)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 15)
+                                    .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
+                            )
+                    }
+                    .padding(.bottom, 8)
                 }
                 
                 // Панель быстрых трюков для котика
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
+                        ActionChip(icon: "fish.fill", label: "Покормить") {
+                            let reply = tamagotchi.feedFish()
+                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
+                        }
                         ActionChip(icon: "pawprint.fill", label: "Повисни") {
                             sendCatCommand("Повисни на лапках под Dynamic Island")
                         }

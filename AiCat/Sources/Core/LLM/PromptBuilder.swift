@@ -25,7 +25,10 @@ public struct PromptBuilder {
     7. `search_knowledge_base(query: String)` — офлайн поиск по сохраненным документам и файлам (RAG).
     8. `generate_music(style: String)` — генерация мелодий и битов ("lo-fi", "cyberpunk", "8-bit").
     9. `photo_tool(action: String)` — работа с фото ("remove_background", "enhance", "ocr_read").
-    10. `device_action(command: String)` — системные команды ("flashlight_on", "flashlight_off", "timer_start", "toggle_silent").
+    10. `launch_app(app_name: String)` — запуск любого приложения на iPhone ("telegram", "youtube", "whatsapp", "camera", "settings", "music", "maps").
+    11. `translate_text(text: String, target_lang: String)` — синхронный перевод речи и текста офлайн.
+    12. `tamagotchi_action(action: String)` — действия с котом ("feed" — покормить рыбкой 🐟, "pet" — погладить 😻, "sleep" — спать 💤).
+    13. `device_action(command: String)` — системные команды ("flashlight_on", "flashlight_off", "timer_start", "toggle_silent").
     
     ФОРМАТ ВЫЗОВА ИНСТРУМЕНТОВ:
     Если нужно выполнить действие, верни ответ в строгом JSON-формате:

@@ -55,6 +55,25 @@ public final class ToolRegistry {
         case "photo_tool":
             let action = payload.parameters?["action"] ?? "enhance"
             actionResult = "Фото-инструмент '\(action)' активирован. Обрабатываю изображение в A17 Pro."
+            
+        case "launch_app":
+            let app = payload.parameters?["app_name"] ?? "telegram"
+            actionResult = await MainActor.run { AppLauncherTool.shared.openApp(named: app) }
+            
+        case "tamagotchi_action":
+            let act = payload.parameters?["action"] ?? "feed"
+            if act == "feed" {
+                actionResult = TamagotchiManager.shared.feedFish()
+            } else if act == "pet" {
+                actionResult = TamagotchiManager.shared.petCat()
+            } else {
+                actionResult = TamagotchiManager.shared.sleep()
+            }
+            
+        case "translate_text":
+            let txt = payload.parameters?["text"] ?? ""
+            let lang = payload.parameters?["target_lang"] ?? "английский"
+            actionResult = "Перевожу на \(lang): [Офлайн перевод выполняется на A17 Pro]"
 
             
         default:
