@@ -101,9 +101,13 @@ public final class ModelManager: ObservableObject {
         let bundle = Bundle.main.bundleURL
         
         let candidateDirs: [URL] = [
-            docs.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
-            docs.appendingPathComponent("sd_coreml"),
             bundle.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
+            bundle.appendingPathComponent("Models").appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
+            bundle.appendingPathComponent("sd_coreml"),
+            bundle.appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
+            docs.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
+            docs.appendingPathComponent("Models").appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
+            docs.appendingPathComponent("sd_coreml"),
             docs.appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled")
         ]
         
