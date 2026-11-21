@@ -5,6 +5,8 @@ public struct MainView: View {
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
     @State private var isListening: Bool = false
+    @State private var showModelManager: Bool = false
+    @State private var showWardrobe: Bool = false
     @State private var chatMessages: [ChatMessage] = [
         ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой локальный агент. Живу в A17 Pro, на серверы ничего не сливаю. Чем займемся?")
     ]
@@ -34,6 +36,24 @@ public struct MainView: View {
                     }
                     
                     Spacer()
+                    
+                    // Кнопка Гардероба
+                    Button(action: { showWardrobe = true }) {
+                        Image(systemName: "tshirt.fill")
+                            .foregroundColor(.cyan)
+                            .padding(8)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    
+                    // Кнопка Управления Моделями
+                    Button(action: { showModelManager = true }) {
+                        Image(systemName: "cpu.fill")
+                            .foregroundColor(.cyan)
+                            .padding(8)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
                     
                     // Ползунок озвучки голосом
                     HStack(spacing: 6) {
@@ -147,6 +167,12 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 10)
             }
+        }
+        .sheet(isPresented: $showModelManager) {
+            ModelManagerView()
+        }
+        .sheet(isPresented: $showWardrobe) {
+            WardrobeSheet()
         }
     }
     
