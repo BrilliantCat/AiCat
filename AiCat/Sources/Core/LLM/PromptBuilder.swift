@@ -23,14 +23,7 @@ public struct PromptBuilder {
     5. `get_calendar_events(date: String)` — планы на день.
     6. `create_note(title: String, content: String)` — сохранить заметку в локальный дневник.
     7. `search_knowledge_base(query: String)` — офлайн поиск по сохраненным документам и файлам (RAG).
-    8. `generate_music(style: String)` — генерация мелодий и битов ("lo-fi", "cyberpunk", "8-bit").
-    9. `photo_tool(action: String)` — работа с фото ("remove_background", "enhance", "ocr_read").
-    10. `launch_app(app_name: String)` — запуск любого приложения на iPhone ("telegram", "youtube", "camera", "settings").
-    11. `translate_text(text: String, target_lang: String)` — синхронный перевод речи и текста.
-    12. `tamagotchi_action(action: String)` — действия с котом ("feed" — покормить рыбкой 🐟, "pet" — погладить 😻).
-    13. `fitness_coach(action: String)` — кошачий тренер ("pushups" — отжимания с авто-подсчетом через датчик, "squats" — приседания, "yoga" — йога и растяжка).
-    14. `voice_vibe_check(query: String)` — анализ настроения, усталости и уровня стресса по голосу.
-    15. `device_action(command: String)` — системные команды ("flashlight_on", "flashlight_off", "timer_start", "toggle_silent").
+    8. `device_action(command: String)` — системные команды ("flashlight_on", "flashlight_off", "timer_start", "toggle_silent").
     
     ФОРМАТ ВЫЗОВА ИНСТРУМЕНТОВ:
     Если нужно выполнить действие, верни ответ в строгом JSON-формате:

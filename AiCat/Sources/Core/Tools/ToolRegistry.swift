@@ -48,37 +48,6 @@ public final class ToolRegistry {
             let found = RAGTool.shared.searchKnowledge(query: q)
             actionResult = found.isEmpty ? "В твоих документах ничего похожего не нашел." : "Вот что я раскопал в твоих файлах:\n" + found
             
-        case "generate_music":
-            let style = payload.parameters?["style"] ?? "lo-fi"
-            actionResult = MusicTool.shared.generateBeat(style: style)
-            
-        case "photo_tool":
-            let action = payload.parameters?["action"] ?? "enhance"
-            actionResult = "Фото-инструмент '\(action)' активирован. Обрабатываю изображение в A17 Pro."
-            
-        case "launch_app":
-            let app = payload.parameters?["app_name"] ?? "telegram"
-            actionResult = await MainActor.run { AppLauncherTool.shared.openApp(named: app) }
-            
-        case "tamagotchi_action":
-            let act = payload.parameters?["action"] ?? "feed"
-            actionResult = act == "feed" ? TamagotchiManager.shared.feedFish() : TamagotchiManager.shared.petCat()
-            
-        case "yoga_coach", "fitness_coach":
-            let act = payload.parameters?["action"] ?? payload.parameters?["command"] ?? "pushups"
-            if act == "pushups" {
-                actionResult = CatFitnessCoach.shared.startPushups()
-            } else if act == "squats" {
-                actionResult = CatFitnessCoach.shared.startSquats()
-            } else {
-                actionResult = YogaCoachTool.shared.startWorkout()
-            }
-            
-        case "voice_vibe_check":
-            let q = payload.parameters?["query"] ?? ""
-            let res = VoiceVibeTool.shared.analyzeVibe(transcribedText: q)
-            actionResult = "Вайб-чек: \(res.dominantEmotion). Стресс: \(res.stressLevel)%. Совет кота: \(res.catAdvice)"
-            
         default:
             actionResult = "Инструмент '\(payload.tool)' выполнен."
         }

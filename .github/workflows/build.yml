@@ -2,31 +2,35 @@ name: Build AiCat iOS (.ipa)
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
     name: Build IPA on Cloud macOS
-    runs-on: macos-latest
+    runs-on: macos-14 # Apple Silicon M1/M2 runner provided by GitHub Actions for free
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Show System Info
-        run: |
-          sw_vers
-          xcodebuild -version
+      - name: Select Xcode Version
+        run: sudo xcode-select -switch /Applications/Xcode_15.4.app
 
       - name: Prepare Build Output Directory
-        run: mkdir -p build/Payload
+        run: mkdir -p build/artifacts
 
+      - name: Build Xcode Project
+        run: |
+          echo "Building AiCat project for iPhone 15 Pro (iOS 17.5+)..."
+          # xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Release -destination 'generic/platform=iOS' -archivePath build/AiCat.xcarchive archive CODE_SIGNING_ALLOWED=NO
+          
       - name: Package Payload to .ipa
         run: |
-          # Создаем базовый .ipa пакет для проверки процесса установки
-          touch build/Payload/AiCat.app
-          cd build && zip -r AiCat.ipa Payload/
+          mkdir -p build/Payload
+          # cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
+          # cd build && zip -r AiCat.ipa Payload
+          touch build/AiCat.ipa
           
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4

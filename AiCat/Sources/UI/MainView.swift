@@ -2,14 +2,9 @@ import SwiftUI
 
 public struct MainView: View {
     @StateObject private var catHandler = CatActionHandler.shared
-    @StateObject private var tamagotchi = TamagotchiManager.shared
-    @StateObject private var certificateWatchdog = CertificateWatchdog.shared
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
     @State private var isListening: Bool = false
-    @State private var showCertificateInfo: Bool = false
-    @State private var showModelManager: Bool = false
-    @State private var showWardrobe: Bool = false
     @State private var chatMessages: [ChatMessage] = [
         ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой локальный агент. Живу в A17 Pro, на серверы ничего не сливаю. Чем займемся?")
     ]
@@ -57,32 +52,6 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.top, 10)
                 
-                // Баннер истечения 7-дневного сертификата
-                if certificateWatchdog.needsRenewal {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Сертификат истекает через \(certificateWatchdog.daysRemaining) дн. Нажми для инструкции!")
-                            .font(.caption2)
-                            .foregroundColor(.white)
-                        Spacer()
-                        Button("Инфо") {
-                            showCertificateInfo = true
-                        }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.3))
-                        .cornerRadius(8)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.15))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                }
-                
                 // Интерактивная 3D-сцена с котиком (погладить, покрутить)
                 ZStack(alignment: .bottom) {
                     Cat3DSceneView()
@@ -106,26 +75,6 @@ public struct MainView: View {
                 // Панель быстрых трюков для котика
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ActionChip(icon: "fish.fill", label: "Покормить") {
-                            let reply = tamagotchi.feedFish()
-                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
-                        }
-                        ActionChip(icon: "figure.mind.and.body", label: "Йога с котом") {
-                            let reply = YogaCoachTool.shared.startWorkout()
-                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
-                        }
-                        ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
-                            let reply = CatFitnessCoach.shared.startPushups()
-                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
-                        }
-                        ActionChip(icon: "figure.walk", label: "Приседания") {
-                            let reply = CatFitnessCoach.shared.startSquats()
-                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
-                        }
-                        ActionChip(icon: "waveform.badge.magnifyingglass", label: "Вайб-чек") {
-                            let reply = "Слушаю твой голос... Вайб: Спокойный, уверенный. Стресс всего 20%. Кот одобряет!"
-                            chatMessages.append(ChatMessage(sender: .cat, text: reply))
-                        }
                         ActionChip(icon: "pawprint.fill", label: "Повисни") {
                             sendCatCommand("Повисни на лапках под Dynamic Island")
                         }
@@ -198,19 +147,6 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 10)
             }
-        }
-        .sheet(isPresented: $showWardrobe) {
-            WardrobeSheet()
-        }
-        .sheet(isPresented: $showModelManager) {
-            ModelManagerView()
-        }
-        .alert(isPresented: $showCertificateInfo) {
-            Alert(
-                title: Text("Обновление сертификата (7 дней)"),
-                message: Text(certificateWatchdog.instructionsText),
-                dismissButton: .default(Text("Понятно, кожаный!"))
-            )
         }
     }
     
