@@ -2,15 +2,6 @@ import Foundation
 import UIKit
 import CoreMotion
 
-public struct FitnessExercise: Identifiable {
-    public let id = UUID()
-    public let name: String
-    public let targetReps: Int?
-    public let durationSeconds: Int?
-    public let catComment: String
-    public let instructions: String
-}
-
 public final class CatFitnessCoach: ObservableObject {
     public static let shared = CatFitnessCoach()
     
@@ -21,59 +12,28 @@ public final class CatFitnessCoach: ObservableObject {
     @Published public var catCheerMessage: String = ""
     
     private let motionManager = CMMotionManager()
-    
-    // Комплекс: Силовые (Отжимания, Приседания) + Йога/Растяжка
-    public let exercises: [FitnessExercise] = [
-        FitnessExercise(
-            name: "Отжимания хищника («Грудью к миске»)",
-            targetReps: 15,
-            durationSeconds: nil,
-            catComment: "Положи телефон экраном вверх на пол под грудь! Опускайся низко — датчик телефона сам посчитает каждое чистое повторение. Не халтурить!",
-            instructions: "Классические отжимания от пола. Касаемся подбородком или грудью виртуальной линии."
-        ),
-        FitnessExercise(
-            name: "Тигриные приседания («Прыжок за добычей»)",
-            targetReps: 20,
-            durationSeconds: nil,
-            catComment: "Держи телефон в руке или в кармане! Приседай глубоко, пятки не отрывай. Каждое приседание сделает твои задние лапы стальными!",
-            instructions: "Глубокие приседания, колени смотрят по направлению носков."
-        ),
-        FitnessExercise(
-            name: "Поза кошки (Марджариасана)",
-            targetReps: nil,
-            durationSeconds: 30,
-            catComment: "Вставай на четвереньки, плавно выгибай спину дугой на вдохе и округляй на выдохе.",
-            instructions: "Снятие напряжения со спины после отжиманий."
-        ),
-        FitnessExercise(
-            name: "Королевская планка с котом",
-            targetReps: nil,
-            durationSeconds: 45,
-            catComment: "Замри в планке! Я сижу у тебя между лопаток. Если сдашься — упадешь прямо в мой лоток!",
-            instructions: "Статическая нагрузка на весь мышечный корсет."
-        )
-    ]
+    private var lastRepTime: TimeInterval = 0
     
     private init() {}
     
-    // Запуск режима подсчета отжиманий (через датчик приближения Proximity Sensor)
+    // Запуск режима подсчета отжиманий (через датчик приближения)
     public func startPushups() -> String {
         isWorkoutActive = true
         currentExerciseName = "Отжимания хищника"
         currentRepsCount = 0
         targetReps = 15
+        catCheerMessage = "Положи телефон экраном вверх под грудь! Опускайся к экрану — я считаю."
         
-        // Включаем сенсор приближения iPhone (срабатывает, когда грудь опускается к экрану!)
         UIDevice.current.isProximityMonitoringEnabled = true
+        NotificationCenter.default.removeObserver(self, name: UIDevice.proximityStateDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleProximityChange), name: UIDevice.proximityStateDidChangeNotification, object: nil)
         
         CatActionHandler.shared.state.moodEmoji = "💪"
-        CatActionHandler.shared.state.statusText = "Считает твои отжимания"
+        CatActionHandler.shared.state.statusText = "Считает отжимания: 0/\(targetReps)"
         
-        // Включаем фоновый энергичный бит через MusicTool
         _ = MusicTool.shared.generateBeat(style: "cyberpunk")
         
-        return "Положи iPhone на пол под грудь экраном вверх! Начинай отжиматься — я сам считаю каждое касание. Врубаю бодрый бит. Цель: 15 раз. Погнали!"
+        return "Положи iPhone под грудь экраном вверх! Начинай отжиматься — я вслух считаю каждое чистое повторение. Цель: 15 раз. Погнали!"
     }
     
     // Запуск приседаний (с отслеживанием через акселерометр)
@@ -82,32 +42,43 @@ public final class CatFitnessCoach: ObservableObject {
         currentExerciseName = "Тигриные приседания"
         currentRepsCount = 0
         targetReps = 20
+        catCheerMessage = "Держи телефон в руке или в кармане. Приседай глубоко!"
         
         startMotionTracking()
         
         CatActionHandler.shared.state.moodEmoji = "🐯"
-        CatActionHandler.shared.state.statusText = "Считает приседания"
+        CatActionHandler.shared.state.statusText = "Считает приседания: 0/\(targetReps)"
         
-        // Включаем бодрый ритм для приседаний
         _ = MusicTool.shared.generateBeat(style: "8-bit")
         
-        return "Держи телефон в руке или положи в карман. Начинай глубокие приседания — датчики A17 Pro зафиксируют каждое движение!"
+        return "Держи телефон в руке или в кармане. Начинай глубокие приседания — я фиксирую каждое движение!"
     }
     
     @objc private func handleProximityChange() {
+        guard isWorkoutActive else { return }
+        
         if UIDevice.current.proximityState {
-            // Грудь опустилась к телефону — засчитываем отжимание!
-            currentRepsCount += 1
+            let now = Date().timeIntervalSince1970
+            // Защита от дребезга (не чаще чем раз в 0.7 секунды)
+            guard now - lastRepTime > 0.7 else { return }
+            lastRepTime = now
             
-            let generator = UIImpactFeedbackGenerator(style: .heavy)
-            generator.impactOccurred()
-            
-            if currentRepsCount >= targetReps {
-                catCheerMessage = "15! КРАСАВЧИК! Отжался на максимум. Ты зверь, кожаный!"
-                CatSpeechSynthesizer.shared.speak(text: "Пятнадцать! Отличная работа, кожаный!")
-                stopWorkout()
-            } else {
-                CatSpeechSynthesizer.shared.speak(text: "\(currentRepsCount)!")
+            DispatchQueue.main.async {
+                self.currentRepsCount += 1
+                CatActionHandler.shared.state.statusText = "Отжимания: \(self.currentRepsCount)/\(self.targetReps)"
+                
+                let generator = UIImpactFeedbackGenerator(style: .heavy)
+                generator.impactOccurred()
+                
+                if self.currentRepsCount >= self.targetReps {
+                    self.catCheerMessage = "15! КРАСАВЧИК! Отжался на максимум. Ты зверь, кожаный!"
+                    CatSpeechSynthesizer.shared.speak(text: "Пятнадцать! Отличная работа, кожаный! Ты зверь!")
+                    self.stopWorkout()
+                } else {
+                    let phrases = ["Раз!", "Два!", "Три!", "Четыре!", "Пять, отлично!", "Шесть!", "Семь!", "Восемь, жми!", "Девять!", "Десять, еще пять!", "Одиннадцать!", "Двенадцать!", "Тринадцать!", "Четырнадцать!"]
+                    let text = self.currentRepsCount <= phrases.count ? phrases[self.currentRepsCount - 1] : "\(self.currentRepsCount)!"
+                    CatSpeechSynthesizer.shared.speak(text: text)
+                }
             }
         }
     }
@@ -118,18 +89,23 @@ public final class CatFitnessCoach: ObservableObject {
         
         var isDown = false
         motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-            guard let self = self, let z = data?.acceleration.z else { return }
+            guard let self = self, self.isWorkoutActive, let z = data?.acceleration.z else { return }
             
-            // Детектируем фазу приседа (опускание и подъем)
-            if z < -0.7 && !isDown {
+            if z < -0.65 && !isDown {
                 isDown = true
-            } else if z > -0.2 && isDown {
+            } else if z > -0.25 && isDown {
                 isDown = false
                 self.currentRepsCount += 1
-                CatSpeechSynthesizer.shared.speak(text: "\(self.currentRepsCount)")
+                CatActionHandler.shared.state.statusText = "Приседания: \(self.currentRepsCount)/\(self.targetReps)"
+                
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
                 
                 if self.currentRepsCount >= self.targetReps {
+                    CatSpeechSynthesizer.shared.speak(text: "Двадцать! Приседания окончены, стальные лапы обеспечены!")
                     self.stopWorkout()
+                } else {
+                    CatSpeechSynthesizer.shared.speak(text: "\(self.currentRepsCount)")
                 }
             }
         }
@@ -142,6 +118,6 @@ public final class CatFitnessCoach: ObservableObject {
         motionManager.stopAccelerometerUpdates()
         
         CatActionHandler.shared.state.moodEmoji = "😼"
-        CatActionHandler.shared.state.statusText = "Тренировка окончена"
+        CatActionHandler.shared.state.statusText = "Тренировка завершена"
     }
 }

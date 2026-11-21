@@ -5,6 +5,7 @@ public struct MainView: View {
     @StateObject private var tamagotchi = TamagotchiManager.shared
     @StateObject private var modelManager = ModelManager.shared
     @StateObject private var certificateWatchdog = CertificateWatchdog.shared
+    @StateObject private var fitnessCoach = CatFitnessCoach.shared
     
     @State private var inputText: String = ""
     @State private var voiceEnabled: Bool = true
@@ -12,53 +13,54 @@ public struct MainView: View {
     @State private var showCertificateInfo: Bool = false
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
-    @State private var islandCatWalkOffset: CGFloat = -40
-    @State private var islandCatDirection: CGFloat = 1
     
     @FocusState private var isInputFocused: Bool
     
-    @State private var chatMessages: [ChatMessage] = [
-        ChatMessage(sender: .cat, text: "Салют, кожаный! Я AiCat — твой 3D-агент в черных очках. Моделирую мысли в чипе A17 Pro. Погладь меня по голове, нажми трюки или спроси что угодно!")
-    ]
+    @State private var chatMessages: [ChatMessage] = []
     
     public init() {}
     
     public var body: some View {
         ZStack {
-            // Фон: темный Apple Dark
+            // Фон: глубокий темный Apple Dark
             Color(red: 0.07, green: 0.08, blue: 0.11).ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 1. Dynamic Island Интерактивный кошачий островок
-                dynamicIslandHabitat
-                
-                // 2. Шапка с тумблером голоса и кнопками
+                // 1. Верхняя панель управления
                 headerView
                 
-                // 3. Сертификатный баннер (при необходимости)
+                // 2. Сертификатный баннер (если осталось мало дней)
                 if certificateWatchdog.needsRenewal {
                     certificateBanner
                 }
                 
-                // 4. Интерактивная 3D-сцена с котиком (адаптивная высота при открытии клавиатуры)
-                ZStack(alignment: .bottom) {
-                    Cat3DSceneView()
-                        .frame(height: isInputFocused ? 115 : 220)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isInputFocused)
-                    
-                    statusBadges
+                // 3. Фитнес-панель (появляется только во время тренировки)
+                if fitnessCoach.isWorkoutActive {
+                    workoutLiveBanner
+                }
+                
+                // 4. Интерактивная 3D-сцена с котиком (плавно сворачивается в компактный аватар при наборе текста)
+                if !isInputFocused {
+                    ZStack(alignment: .bottom) {
+                        Cat3DSceneView()
+                            .frame(height: 220)
+                            .transition(.opacity.combined(with: .scale))
+                        
+                        statusBadges
+                    }
                 }
                 
                 // 5. Панель быстрых трюков
                 actionChipsBar
                 
-                // 6. Лента сообщений чата
+                // 6. Лента сообщений чата (занимает весь свободный экран)
                 messagesScrollView
                 
                 // 7. Поле ввода и микрофон
                 inputBar
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isInputFocused)
         .sheet(isPresented: $showWardrobe) {
             WardrobeSheet()
         }
@@ -73,72 +75,8 @@ public struct MainView: View {
             )
         }
         .onAppear {
-            startIslandCatPatrol()
-        }
-    }
-    
-    // MARK: - Dynamic Island Habitat
-    
-    private var dynamicIslandHabitat: some View {
-        HStack {
-            Spacer()
-            HStack(spacing: 8) {
-                // Бегающий мини-котик по островку
-                HStack(spacing: 4) {
-                    Text("🐾")
-                        .font(.caption2)
-                        .opacity(0.8)
-                    Text("🐱🕶️")
-                        .font(.subheadline)
-                        .offset(x: islandCatWalkOffset)
-                        .scaleEffect(x: islandCatDirection, y: 1.0)
-                }
-                .onTapGesture {
-                    let reply = catHandler.execute(action: "somersault")
-                    addCatResponse(reply)
-                }
-                
-                Text("AiCat Island")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(.cyan)
-                
-                Button(action: {
-                    let reply = catHandler.execute(action: "hang_on_island")
-                    addCatResponse(reply)
-                }) {
-                    Text("Повисни")
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.cyan.opacity(0.25))
-                        .foregroundColor(.cyan)
-                        .cornerRadius(8)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 4)
-            .background(Color.black.opacity(0.85))
-            .cornerRadius(18)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.cyan.opacity(0.35), lineWidth: 1)
-            )
-            Spacer()
-        }
-        .padding(.top, 4)
-    }
-    
-    private func startIslandCatPatrol() {
-        Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
-            withAnimation(.easeInOut(duration: 2.0)) {
-                if islandCatWalkOffset > 25 {
-                    islandCatWalkOffset = -35
-                    islandCatDirection = -1
-                } else {
-                    islandCatWalkOffset = 30
-                    islandCatDirection = 1
-                }
-            }
+            // Загружаем сохраненную историю диалога
+            self.chatMessages = ChatStorage.shared.loadMessages()
         }
     }
     
@@ -161,6 +99,19 @@ public struct MainView: View {
             }
             
             Spacer()
+            
+            // Очистка чата
+            Button(action: {
+                ChatStorage.shared.clear()
+                chatMessages = ChatStorage.shared.loadMessages()
+            }) {
+                Image(systemName: "trash")
+                    .foregroundColor(.gray)
+                    .font(.caption)
+                    .padding(7)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Circle())
+            }
             
             // Гардероб
             Button(action: { showWardrobe = true }) {
@@ -195,7 +146,45 @@ public struct MainView: View {
             .cornerRadius(16)
         }
         .padding(.horizontal)
-        .padding(.top, 4)
+        .padding(.top, 6)
+    }
+    
+    // MARK: - Workout Live HUD
+    
+    private var workoutLiveBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "figure.strengthtraining.traditional")
+                .font(.title2)
+                .foregroundColor(.cyan)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(fitnessCoach.currentExerciseName): \(fitnessCoach.currentRepsCount) из \(fitnessCoach.targetReps)")
+                    .font(.subheadline)
+                    .bold()
+                    .foregroundColor(.white)
+                Text(fitnessCoach.catCheerMessage)
+                    .font(.caption2)
+                    .foregroundColor(.cyan)
+            }
+            
+            Spacer()
+            
+            Button("Стоп") {
+                fitnessCoach.stopWorkout()
+            }
+            .font(.caption)
+            .bold()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.red.opacity(0.25))
+            .foregroundColor(.red)
+            .cornerRadius(10)
+        }
+        .padding(10)
+        .background(Color.cyan.opacity(0.12))
+        .cornerRadius(14)
+        .padding(.horizontal)
+        .padding(.vertical, 4)
     }
     
     private var certificateBanner: some View {
@@ -272,7 +261,7 @@ public struct MainView: View {
                     addCatResponse(reply)
                 }
                 ActionChip(icon: "paintpalette.fill", label: "Нарисуй арт") {
-                    sendUserQuery("Нарисуй кибер-кота в черных очках в стиле неонового киберпанка")
+                    sendUserQuery("Нарисуй неоновый киберпанк город с летающими машинами")
                 }
                 ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
                     let reply = CatFitnessCoach.shared.startPushups()
@@ -299,6 +288,9 @@ public struct MainView: View {
                 }
                 .padding(.horizontal)
                 .padding(.top, 6)
+            }
+            .onTapGesture {
+                isInputFocused = false
             }
             .onChange(of: chatMessages.count) { _ in
                 if let last = chatMessages.last {
@@ -361,7 +353,9 @@ public struct MainView: View {
     // MARK: - Logic & AI Chat
     
     private func sendUserQuery(_ text: String) {
-        chatMessages.append(ChatMessage(sender: .user, text: text))
+        let userMsg = ChatMessage(sender: .user, text: text)
+        chatMessages.append(userMsg)
+        ChatStorage.shared.saveMessages(chatMessages)
         
         Task {
             let (reply, image) = await LLMEngine.shared.generate(prompt: text)
@@ -372,7 +366,13 @@ public struct MainView: View {
     }
     
     private func addCatResponse(_ text: String, image: UIImage? = nil) {
-        chatMessages.append(ChatMessage(sender: .cat, text: text, image: image))
+        let catMsg = ChatMessage(
+            sender: .cat,
+            text: text,
+            imageData: image?.jpegData(compressionQuality: 0.85)
+        )
+        chatMessages.append(catMsg)
+        ChatStorage.shared.saveMessages(chatMessages)
         
         if voiceEnabled {
             CatSpeechSynthesizer.shared.speak(text: text)
@@ -396,17 +396,23 @@ public struct MainView: View {
     }
 }
 
-public struct ChatMessage: Identifiable {
-    public let id = UUID()
-    public enum Sender { case user, cat }
-    public let sender: Sender
-    public let text: String
-    public var image: UIImage? = nil
+public struct ChatMessage: Identifiable, Codable {
+    public var id: UUID
+    public enum Sender: String, Codable { case user, cat }
+    public var sender: Sender
+    public var text: String
+    public var imageData: Data?
     
-    public init(sender: Sender, text: String, image: UIImage? = nil) {
+    public init(id: UUID = UUID(), sender: Sender, text: String, imageData: Data? = nil) {
+        self.id = id
         self.sender = sender
         self.text = text
-        self.image = image
+        self.imageData = imageData
+    }
+    
+    public var image: UIImage? {
+        guard let data = imageData else { return nil }
+        return UIImage(data: data)
     }
 }
 

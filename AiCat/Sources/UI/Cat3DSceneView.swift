@@ -17,188 +17,207 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         let rootNode = scene.rootNode
         
-        // 1. Студийный кинематографичный свет
+        // 1. Освещение студийного уровня (Кинематографичный 3D-свет с неоновым контурным светом)
         let keyLight = SCNNode()
         keyLight.light = SCNLight()
         keyLight.light?.type = .directional
-        keyLight.light?.color = UIColor(white: 1.0, alpha: 1.0)
-        keyLight.light?.intensity = 1200
-        keyLight.position = SCNVector3(x: 2.5, y: 4.5, z: 4.0)
-        keyLight.eulerAngles = SCNVector3(-0.55, 0.45, 0)
+        keyLight.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.95, alpha: 1.0)
+        keyLight.light?.intensity = 1400
+        keyLight.position = SCNVector3(x: 2.0, y: 4.5, z: 4.0)
+        keyLight.eulerAngles = SCNVector3(-0.5, 0.4, 0)
         rootNode.addChildNode(keyLight)
         
-        let rimLight = SCNNode()
-        rimLight.light = SCNLight()
-        rimLight.light?.type = .omni
-        rimLight.light?.color = UIColor.systemCyan
-        rimLight.light?.intensity = 900
-        rimLight.position = SCNVector3(x: -2.5, y: 2.0, z: -2.5)
-        rootNode.addChildNode(rimLight)
+        let cyanRim = SCNNode()
+        cyanRim.light = SCNLight()
+        cyanRim.light?.type = .omni
+        cyanRim.light?.color = UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 1.0)
+        cyanRim.light?.intensity = 1100
+        cyanRim.position = SCNVector3(x: -2.8, y: 2.2, z: -2.5)
+        rootNode.addChildNode(cyanRim)
+        
+        let magentaFill = SCNNode()
+        magentaFill.light = SCNLight()
+        magentaFill.light?.type = .omni
+        magentaFill.light?.color = UIColor(red: 0.8, green: 0.2, blue: 0.9, alpha: 1.0)
+        magentaFill.light?.intensity = 600
+        magentaFill.position = SCNVector3(x: 2.5, y: -1.0, z: 2.0)
+        rootNode.addChildNode(magentaFill)
         
         let ambientLight = SCNNode()
         ambientLight.light = SCNLight()
         ambientLight.light?.type = .ambient
-        ambientLight.light?.color = UIColor(white: 0.38, alpha: 1.0)
+        ambientLight.light?.color = UIColor(red: 0.18, green: 0.22, blue: 0.30, alpha: 1.0)
         rootNode.addChildNode(ambientLight)
         
         // Камера
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
-        cameraNode.position = SCNVector3(x: 0, y: 1.05, z: 3.1)
+        cameraNode.position = SCNVector3(x: 0, y: 0.95, z: 3.0)
         rootNode.addChildNode(cameraNode)
         
-        // 2. Сборка реалистичного 3D-кота AiCat
+        // 2. Кибер-пьедестал с неоновыми кольцами под лапками кота
+        let ringGeo = SCNTorus(ringRadius: 0.9, pipeRadius: 0.02)
+        ringGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
+        ringGeo.firstMaterial?.emission.contents = UIColor.systemCyan
+        let ringNode = SCNNode(geometry: ringGeo)
+        ringNode.position = SCNVector3(0, 0.02, 0)
+        let ringRotate = SCNAction.rotateBy(x: 0, y: CGFloat(Double.pi * 2), z: 0, duration: 8.0)
+        ringNode.runAction(SCNAction.repeatForever(ringRotate))
+        rootNode.addChildNode(ringNode)
+        
+        // 3. Персонаж: Стильный котик AiCat
         let catRoot = SCNNode()
         catRoot.name = "AiCatRoot"
         
-        // Материалы
-        let furDarkMaterial = SCNMaterial()
-        furDarkMaterial.diffuse.contents = UIColor(red: 0.22, green: 0.24, blue: 0.30, alpha: 1.0) // Британский графитовый
-        furDarkMaterial.roughness.contents = 0.55
-        furDarkMaterial.specular.contents = UIColor(white: 0.25, alpha: 1.0)
+        // Премиальные материалы
+        let furMaterial = SCNMaterial()
+        furMaterial.diffuse.contents = UIColor(red: 0.22, green: 0.25, blue: 0.32, alpha: 1.0) // Британский сапфирово-серый
+        furMaterial.roughness.contents = 0.5
+        furMaterial.specular.contents = UIColor(white: 0.3, alpha: 1.0)
         
         let furWhiteMaterial = SCNMaterial()
-        furWhiteMaterial.diffuse.contents = UIColor(red: 0.92, green: 0.94, blue: 0.96, alpha: 1.0) // Белая манишка и лапки
+        furWhiteMaterial.diffuse.contents = UIColor(red: 0.94, green: 0.95, blue: 0.98, alpha: 1.0)
         furWhiteMaterial.roughness.contents = 0.6
         
         let pinkMaterial = SCNMaterial()
-        pinkMaterial.diffuse.contents = UIColor(red: 0.98, green: 0.58, blue: 0.68, alpha: 1.0) // Розовый носик и ушки
+        pinkMaterial.diffuse.contents = UIColor(red: 0.98, green: 0.60, blue: 0.70, alpha: 1.0)
         
         let eyeMaterial = SCNMaterial()
-        eyeMaterial.diffuse.contents = UIColor(red: 0.15, green: 0.88, blue: 0.45, alpha: 1.0) // Изумрудные кошачьи глаза
-        eyeMaterial.emission.contents = UIColor(red: 0.05, green: 0.3, blue: 0.15, alpha: 1.0)
-        
-        let pupilMaterial = SCNMaterial()
-        pupilMaterial.diffuse.contents = UIColor.black
+        eyeMaterial.diffuse.contents = UIColor(red: 0.1, green: 0.95, blue: 0.5, alpha: 1.0) // Изумруд
+        eyeMaterial.emission.contents = UIColor(red: 0.05, green: 0.35, blue: 0.15, alpha: 1.0)
         
         let glassMaterial = SCNMaterial()
-        glassMaterial.diffuse.contents = UIColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.88)
-        glassMaterial.metalness.contents = 0.85
-        glassMaterial.roughness.contents = 0.1
+        glassMaterial.diffuse.contents = UIColor(red: 0.05, green: 0.05, blue: 0.08, alpha: 0.92)
+        glassMaterial.metalness.contents = 0.9
+        glassMaterial.roughness.contents = 0.05
         
         // --- ГОЛОВА ---
         let headGeo = SCNSphere(radius: 0.52)
-        headGeo.firstMaterial = furDarkMaterial
+        headGeo.firstMaterial = furMaterial
         let headNode = SCNNode(geometry: headGeo)
         headNode.name = "Head"
         headNode.position = SCNVector3(0, 1.25, 0)
         catRoot.addChildNode(headNode)
         
-        // --- ЩЕЧКИ КОТА (выразительная кошачья мордочка) ---
+        // Щечки (выразительная мордочка)
         let cheekGeo = SCNSphere(radius: 0.16)
         cheekGeo.firstMaterial = furWhiteMaterial
         
         let leftCheek = SCNNode(geometry: cheekGeo)
         leftCheek.position = SCNVector3(-0.13, 1.12, 0.40)
-        catRoot.addChildNode(leftCheek)
+        headNode.addChildNode(leftCheek)
         
         let rightCheek = SCNNode(geometry: cheekGeo)
         rightCheek.position = SCNVector3(0.13, 1.12, 0.40)
-        catRoot.addChildNode(rightCheek)
+        headNode.addChildNode(rightCheek)
         
-        // --- РОЗОВЫЙ КОШАЧИЙ НОСИК ---
+        // Носик
         let noseGeo = SCNSphere(radius: 0.065)
         noseGeo.firstMaterial = pinkMaterial
         let noseNode = SCNNode(geometry: noseGeo)
         noseNode.position = SCNVector3(0, 1.18, 0.49)
-        catRoot.addChildNode(noseNode)
+        headNode.addChildNode(noseNode)
         
-        // --- КОШАЧЬИ ГЛАЗА С ИЗУМРУДНОЙ РАДУЖКОЙ И ЗРАЧКАМИ ---
+        // Глаза с анимированными веками (мигание)
         let eyeGeo = SCNSphere(radius: 0.11)
         eyeGeo.firstMaterial = eyeMaterial
         
         let leftEye = SCNNode(geometry: eyeGeo)
         leftEye.position = SCNVector3(-0.20, 1.32, 0.40)
-        catRoot.addChildNode(leftEye)
+        headNode.addChildNode(leftEye)
         
         let rightEye = SCNNode(geometry: eyeGeo)
         rightEye.position = SCNVector3(0.20, 1.32, 0.40)
-        catRoot.addChildNode(rightEye)
+        headNode.addChildNode(rightEye)
         
-        let pupilGeo = SCNCapsule(capRadius: 0.02, height: 0.12)
-        pupilGeo.firstMaterial = pupilMaterial
-        
+        // Зрачки
+        let pupilGeo = SCNCapsule(capRadius: 0.02, height: 0.11)
+        pupilGeo.firstMaterial?.diffuse.contents = UIColor.black
         let leftPupil = SCNNode(geometry: pupilGeo)
         leftPupil.position = SCNVector3(-0.20, 1.32, 0.50)
-        catRoot.addChildNode(leftPupil)
+        headNode.addChildNode(leftPupil)
         
         let rightPupil = SCNNode(geometry: pupilGeo)
         rightPupil.position = SCNVector3(0.20, 1.32, 0.50)
-        catRoot.addChildNode(rightPupil)
+        headNode.addChildNode(rightPupil)
         
-        // --- ЧЕРНЫЕ КИБЕР-ОЧКИ НА ПЕРЕНОСИЦЕ ---
-        let glassesFrameGeo = SCNBox(width: 0.78, height: 0.22, length: 0.14, chamferRadius: 0.04)
-        glassesFrameGeo.firstMaterial = glassMaterial
-        let glassesNode = SCNNode(geometry: glassesFrameGeo)
+        // Анимация моргания глаз раз в 3.5 секунды
+        let blinkAction = SCNAction.sequence([
+            SCNAction.wait(duration: 3.5),
+            SCNAction.scale(to: SCNVector3(1.0, 0.1, 1.0), duration: 0.08),
+            SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 0.08)
+        ])
+        leftEye.runAction(SCNAction.repeatForever(blinkAction))
+        rightEye.runAction(SCNAction.repeatForever(blinkAction))
+        
+        // Кибер-очки на мордочке
+        let glassesGeo = SCNBox(width: 0.76, height: 0.22, length: 0.14, chamferRadius: 0.04)
+        glassesGeo.firstMaterial = glassMaterial
+        let glassesNode = SCNNode(geometry: glassesGeo)
         glassesNode.name = "Glasses"
         glassesNode.position = SCNVector3(0, 1.32, 0.49)
-        catRoot.addChildNode(glassesNode)
+        headNode.addChildNode(glassesNode)
         
-        // Неоновая полоска на очках (фирменный стиль AiCat)
-        let neonGeo = SCNBox(width: 0.74, height: 0.025, length: 0.15, chamferRadius: 0.01)
-        neonGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
-        neonGeo.firstMaterial?.emission.contents = UIColor.systemCyan
-        let neonNode = SCNNode(geometry: neonGeo)
+        let neonStripGeo = SCNBox(width: 0.72, height: 0.025, length: 0.15, chamferRadius: 0.01)
+        neonStripGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
+        neonStripGeo.firstMaterial?.emission.contents = UIColor.systemCyan
+        let neonNode = SCNNode(geometry: neonStripGeo)
         neonNode.position = SCNVector3(0, 1.37, 0.50)
-        catRoot.addChildNode(neonNode)
+        headNode.addChildNode(neonNode)
         
-        // --- ТРЕУГОЛЬНЫЕ КОШАЧЬИ УШКИ С РОЗОВЫМИ ВСТАВКАМИ ---
+        // Ушки
         let earGeo = SCNCone(topRadius: 0.01, bottomRadius: 0.19, height: 0.36)
-        earGeo.firstMaterial = furDarkMaterial
+        earGeo.firstMaterial = furMaterial
         
         let leftEar = SCNNode(geometry: earGeo)
         leftEar.name = "LeftEar"
         leftEar.position = SCNVector3(-0.32, 1.74, 0.05)
         leftEar.eulerAngles = SCNVector3(0, 0, 0.28)
-        catRoot.addChildNode(leftEar)
+        headNode.addChildNode(leftEar)
         
         let rightEar = SCNNode(geometry: earGeo)
         rightEar.name = "RightEar"
         rightEar.position = SCNVector3(0.32, 1.74, 0.05)
         rightEar.eulerAngles = SCNVector3(0, 0, -0.28)
-        catRoot.addChildNode(rightEar)
+        headNode.addChildNode(rightEar)
         
         let innerEarGeo = SCNCone(topRadius: 0.01, bottomRadius: 0.11, height: 0.26)
         innerEarGeo.firstMaterial = pinkMaterial
-        
         let leftInnerEar = SCNNode(geometry: innerEarGeo)
         leftInnerEar.position = SCNVector3(-0.30, 1.72, 0.12)
         leftInnerEar.eulerAngles = SCNVector3(-0.12, 0, 0.28)
-        catRoot.addChildNode(leftInnerEar)
+        headNode.addChildNode(leftInnerEar)
         
         let rightInnerEar = SCNNode(geometry: innerEarGeo)
         rightInnerEar.position = SCNVector3(0.30, 1.72, 0.12)
         rightInnerEar.eulerAngles = SCNVector3(-0.12, 0, -0.28)
-        catRoot.addChildNode(rightInnerEar)
+        headNode.addChildNode(rightInnerEar)
         
-        // --- БЕЛЫЕ ТОНКИЕ УСИКИ (по 3 с каждой стороны) ---
+        // Усы
         let whiskerGeo = SCNCylinder(radius: 0.006, height: 0.40)
         whiskerGeo.firstMaterial?.diffuse.contents = UIColor.white
-        
-        let whiskerAngles: [Float] = [-0.15, 0.0, 0.15]
-        for (i, angle) in whiskerAngles.enumerated() {
-            let yOffset = Float(i) * Float(0.035)
-            
+        let angles: [Float] = [-0.15, 0.0, 0.15]
+        for (i, a) in angles.enumerated() {
+            let yOff = Float(i) * Float(0.035)
             let lw = SCNNode(geometry: whiskerGeo)
-            lw.position = SCNVector3(-0.35, Float(1.12) + yOffset, 0.38)
-            lw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) + angle)
-            catRoot.addChildNode(lw)
+            lw.position = SCNVector3(-0.35, Float(1.12) + yOff, 0.38)
+            lw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) + a)
+            headNode.addChildNode(lw)
             
             let rw = SCNNode(geometry: whiskerGeo)
-            rw.position = SCNVector3(0.35, Float(1.12) + yOffset, 0.38)
-            rw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) - angle)
-            catRoot.addChildNode(rw)
+            rw.position = SCNVector3(0.35, Float(1.12) + yOff, 0.38)
+            rw.eulerAngles = SCNVector3(0, 0, Float.pi / Float(2) - a)
+            headNode.addChildNode(rw)
         }
         
-        // --- ТЕЛО КОТА (пухлый котик с белой манишкой) ---
+        // --- ТЕЛО И ОШЕЙНИК ---
         let bodyGeo = SCNCapsule(capRadius: 0.44, height: 0.98)
-        bodyGeo.firstMaterial = furDarkMaterial
+        bodyGeo.firstMaterial = furMaterial
         let bodyNode = SCNNode(geometry: bodyGeo)
         bodyNode.name = "Body"
         bodyNode.position = SCNVector3(0, 0.52, -0.05)
         catRoot.addChildNode(bodyNode)
         
-        // Белая грудка
         let bibGeo = SCNSphere(radius: 0.32)
         bibGeo.firstMaterial = furWhiteMaterial
         let bibNode = SCNNode(geometry: bibGeo)
@@ -206,24 +225,22 @@ public struct Cat3DSceneView: UIViewRepresentable {
         bibNode.scale = SCNVector3(0.8, 1.1, 0.5)
         catRoot.addChildNode(bibNode)
         
-        // Ошейник с кулоном
         let collarGeo = SCNCylinder(radius: 0.36, height: 0.04)
         collarGeo.firstMaterial?.diffuse.contents = UIColor.systemRed
         let collarNode = SCNNode(geometry: collarGeo)
         collarNode.position = SCNVector3(0, 0.88, 0.02)
         catRoot.addChildNode(collarNode)
         
-        let bellGeo = SCNSphere(radius: 0.05)
+        let bellGeo = SCNSphere(radius: 0.06)
         bellGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
-        bellGeo.firstMaterial?.metalness.contents = 0.9
+        bellGeo.firstMaterial?.metalness.contents = 0.95
         let bellNode = SCNNode(geometry: bellGeo)
         bellNode.position = SCNVector3(0, 0.84, 0.38)
         catRoot.addChildNode(bellNode)
         
-        // --- ПЕРЕДНИЕ ЛАПКИ (с белыми носочками) ---
-        let pawGeo = SCNCapsule(capRadius: 0.10, height: 0.40)
+        // Лапки
+        let pawGeo = SCNCapsule(capRadius: 0.10, height: 0.38)
         pawGeo.firstMaterial = furWhiteMaterial
-        
         let leftPaw = SCNNode(geometry: pawGeo)
         leftPaw.name = "LeftPaw"
         leftPaw.position = SCNVector3(-0.22, 0.22, 0.28)
@@ -234,27 +251,25 @@ public struct Cat3DSceneView: UIViewRepresentable {
         rightPaw.position = SCNVector3(0.22, 0.22, 0.28)
         catRoot.addChildNode(rightPaw)
         
-        // --- ЗАДНИЕ ЛАПКИ В ПОЗЕ СИДЯ ---
-        let hindLegGeo = SCNSphere(radius: 0.24)
-        hindLegGeo.firstMaterial = furDarkMaterial
-        
-        let leftHind = SCNNode(geometry: hindLegGeo)
+        let hindGeo = SCNSphere(radius: 0.24)
+        hindGeo.firstMaterial = furMaterial
+        let leftHind = SCNNode(geometry: hindGeo)
         leftHind.position = SCNVector3(-0.36, 0.24, -0.05)
         leftHind.scale = SCNVector3(0.8, 0.9, 1.2)
         catRoot.addChildNode(leftHind)
         
-        let rightHind = SCNNode(geometry: hindLegGeo)
+        let rightHind = SCNNode(geometry: hindGeo)
         rightHind.position = SCNVector3(0.36, 0.24, -0.05)
         rightHind.scale = SCNVector3(0.8, 0.9, 1.2)
         catRoot.addChildNode(rightHind)
         
-        // --- ПУШИСТЫЙ ХВОСТ С БЕЛЫМ КОНЧИКОМ ---
+        // Хвост
         let tailRoot = SCNNode()
         tailRoot.name = "TailRoot"
         tailRoot.position = SCNVector3(0, 0.28, -0.42)
         
         let tailBaseGeo = SCNCylinder(radius: 0.075, height: 0.42)
-        tailBaseGeo.firstMaterial = furDarkMaterial
+        tailBaseGeo.firstMaterial = furMaterial
         let tailBase = SCNNode(geometry: tailBaseGeo)
         tailBase.position = SCNVector3(0, 0.18, 0)
         tailBase.eulerAngles = SCNVector3(-0.55, 0, 0)
@@ -265,14 +280,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
         let tailTip = SCNNode(geometry: tailTipGeo)
         tailTip.position = SCNVector3(0, 0.42, -0.15)
         tailRoot.addChildNode(tailTip)
-        
         catRoot.addChildNode(tailRoot)
         
-        // Анимация Idle: покачивание хвостом и мягкое дыхание
+        // Анимации дыхания и хвоста (Idle)
         let tailWag = SCNAction.sequence([
-            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.1),
+            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.2),
             SCNAction.rotateBy(x: 0, y: -0.70, z: -0.30, duration: 1.4),
-            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.1)
+            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.2)
         ])
         tailRoot.runAction(SCNAction.repeatForever(tailWag))
         
@@ -282,19 +296,15 @@ public struct Cat3DSceneView: UIViewRepresentable {
         ])
         catRoot.runAction(SCNAction.repeatForever(breathe))
         
-        // Легкое подергивание левого ушка раз в 5 секунд (живой кот)
         let earTwitch = SCNAction.sequence([
             SCNAction.wait(duration: 4.5),
             SCNAction.rotateBy(x: 0, y: 0, z: -0.18, duration: 0.08),
-            SCNAction.rotateBy(x: 0, y: 0, z: 0.18, duration: 0.08),
-            SCNAction.rotateBy(x: 0, y: 0, z: -0.12, duration: 0.06),
-            SCNAction.rotateBy(x: 0, y: 0, z: 0.12, duration: 0.06)
+            SCNAction.rotateBy(x: 0, y: 0, z: 0.18, duration: 0.08)
         ])
         leftEar.runAction(SCNAction.repeatForever(earTwitch))
         
         rootNode.addChildNode(catRoot)
         
-        // Обработка тапа по коту
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         scnView.addGestureRecognizer(tap)
         
@@ -312,50 +322,58 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         switch actionHandler.state.currentAction {
         case .somersault:
-            // Сальто назад с выпрыгиванием и вращением
-            let crouch = SCNAction.moveBy(x: 0, y: -0.15, z: 0, duration: 0.15)
-            let jumpUp = SCNAction.moveBy(x: 0, y: 0.95, z: 0, duration: 0.35)
-            jumpUp.timingMode = .easeOut
+            // Плавное сальто назад с выпрыгиванием (squash & stretch)
+            let crouch = SCNAction.scale(to: SCNVector3(1.15, 0.85, 1.15), duration: 0.12)
+            let leapUp = SCNAction.moveBy(x: 0, y: 0.95, z: 0, duration: 0.35)
+            leapUp.timingMode = .easeOut
             let spin = SCNAction.rotateBy(x: -CGFloat(Double.pi * 2), y: 0, z: 0, duration: 0.6)
-            let jumpDown = SCNAction.moveBy(x: 0, y: -0.80, z: 0, duration: 0.3)
-            jumpDown.timingMode = .easeIn
+            let stretch = SCNAction.scale(to: SCNVector3(0.9, 1.15, 0.9), duration: 0.25)
+            let fallDown = SCNAction.moveBy(x: 0, y: -0.95, z: 0, duration: 0.3)
+            fallDown.timingMode = .easeIn
+            let bounceLand = SCNAction.sequence([
+                SCNAction.scale(to: SCNVector3(1.1, 0.9, 1.1), duration: 0.08),
+                SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 0.12)
+            ])
             
-            let sequence = SCNAction.sequence([crouch, SCNAction.group([jumpUp, spin]), jumpDown])
-            cat.runAction(sequence)
+            let jumpGroup = SCNAction.group([leapUp, spin, stretch])
+            let fullSomersault = SCNAction.sequence([crouch, jumpGroup, fallDown, bounceLand])
+            cat.runAction(fullSomersault)
             
         case .wash:
-            // Лапка поднимается к мордочке и протирает щечку и ушко
-            if let leftPaw = cat.childNode(withName: "LeftPaw", recursively: true) {
-                let lift = SCNAction.move(to: SCNVector3(-0.15, 1.15, 0.45), duration: 0.22)
-                let scrub1 = SCNAction.rotateBy(x: 0.35, y: 0, z: 0.35, duration: 0.18)
-                let scrub2 = SCNAction.rotateBy(x: -0.35, y: 0, z: -0.35, duration: 0.18)
-                let drop = SCNAction.move(to: SCNVector3(-0.22, 0.22, 0.28), duration: 0.22)
+            // Лапка плавно умывает мордочку 3 раза
+            if let leftPaw = cat.childNode(withName: "LeftPaw", recursively: true),
+               let head = cat.childNode(withName: "Head", recursively: true) {
+                let tiltHead = SCNAction.sequence([
+                    SCNAction.rotateBy(x: 0.1, y: 0, z: 0.15, duration: 0.2),
+                    SCNAction.wait(duration: 1.2),
+                    SCNAction.rotateBy(x: -0.1, y: 0, z: -0.15, duration: 0.2)
+                ])
+                head.runAction(tiltHead)
                 
-                let washCycle = SCNAction.sequence([lift, scrub1, scrub2, scrub1, scrub2, drop])
-                leftPaw.runAction(washCycle)
+                let lift = SCNAction.move(to: SCNVector3(-0.15, 1.15, 0.45), duration: 0.25)
+                lift.timingMode = .easeOut
+                let scrub1 = SCNAction.rotateBy(x: 0.4, y: 0, z: 0.35, duration: 0.2)
+                let scrub2 = SCNAction.rotateBy(x: -0.4, y: 0, z: -0.35, duration: 0.2)
+                let drop = SCNAction.move(to: SCNVector3(-0.22, 0.22, 0.28), duration: 0.25)
+                drop.timingMode = .easeIn
+                
+                let cycle = SCNAction.sequence([lift, scrub1, scrub2, scrub1, scrub2, scrub1, scrub2, drop])
+                leftPaw.runAction(cycle)
             }
             
         case .hangOnIsland:
-            // Кот прыгает наверх к Dynamic Island и раскачивается на лапках
-            let leapUp = SCNAction.move(to: SCNVector3(0, 0.85, 0.3), duration: 0.4)
-            leapUp.timingMode = .easeOut
+            // Кот прыгает наверх к острову и раскачивается как маятник
+            let jumpToIsland = SCNAction.move(to: SCNVector3(0, 1.0, 0.4), duration: 0.4)
+            jumpToIsland.timingMode = .easeOut
             let swing = SCNAction.sequence([
-                SCNAction.rotateBy(x: 0.18, y: 0, z: 0.1, duration: 0.5),
-                SCNAction.rotateBy(x: -0.18, y: 0, z: -0.2, duration: 0.8),
-                SCNAction.rotateBy(x: 0, y: 0, z: 0.1, duration: 0.5)
+                SCNAction.rotateBy(x: 0.15, y: 0, z: 0.12, duration: 0.45),
+                SCNAction.rotateBy(x: -0.15, y: 0, z: -0.24, duration: 0.7),
+                SCNAction.rotateBy(x: 0, y: 0, z: 0.12, duration: 0.45)
             ])
-            let land = SCNAction.move(to: SCNVector3(0, 0, 0), duration: 0.35)
-            land.timingMode = .easeIn
+            let landDown = SCNAction.move(to: SCNVector3(0, 0, 0), duration: 0.35)
+            landDown.timingMode = .easeIn
             
-            cat.runAction(SCNAction.sequence([leapUp, swing, land]))
-            
-        case .play:
-            // Кот делает бросок лапками вперед
-            let pounce = SCNAction.sequence([
-                SCNAction.moveBy(x: 0, y: 0.2, z: 0.4, duration: 0.2),
-                SCNAction.moveBy(x: 0, y: -0.2, z: -0.4, duration: 0.25)
-            ])
-            cat.runAction(pounce)
+            cat.runAction(SCNAction.sequence([jumpToIsland, swing, landDown]))
             
         default:
             break
