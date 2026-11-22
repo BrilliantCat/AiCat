@@ -538,6 +538,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         Coordinator(self)
     }
     
+    @MainActor
     public class Coordinator: NSObject {
         var parent: Cat3DSceneView
         var lastExecutedToken: String = ""
@@ -556,7 +557,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
             
             if gesture.state == .ended {
                 _ = TamagotchiManager.shared.petCat()
-                _ = self.parent.actionHandler.pet()
             }
         }
         
@@ -565,7 +565,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let gen = UIImpactFeedbackGenerator(style: .medium)
             gen.impactOccurred()
             _ = TamagotchiManager.shared.petCat()
-            _ = self.parent.actionHandler.pet()
         }
     }
 }

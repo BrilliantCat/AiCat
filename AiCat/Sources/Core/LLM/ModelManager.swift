@@ -156,6 +156,6 @@ public final class ModelManager: ObservableObject {
 
     public func handleMemoryWarning() {
         // Корректная выгрузка контекста при нехватке памяти на бесплатном профиле
-        DebugLogger.shared.log("Предупреждение памяти. Модели освобождаются после каждой задачи.", level: .warning, tag: "Memory")
+        DebugLogger.shared.log("Предупреждение памяти. Модели освобождаются после каждой задачи.", level: .warn, tag: "Memory")
     }
 }
