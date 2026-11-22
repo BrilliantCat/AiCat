@@ -82,4 +82,12 @@ public final class PhotoTool {
             try? handler.perform([request])
         }
     }
+    
+    public func recognizeTextAsync(from image: UIImage) async -> String {
+        await withCheckedContinuation { continuation in
+            recognizeText(from: image) { text in
+                continuation.resume(returning: text)
+            }
+        }
+    }
 }

@@ -18,10 +18,10 @@ public struct WakeAiCatVoiceIntent: AppIntent {
     }
 }
 
-// Intent для команды "Повисни на лапках" из шорткатов
-public struct HangCatIntent: AppIntent {
-    public static var title: LocalizedStringResource = "AiCat: Повисни на лапках"
-    public static var description = IntentDescription("Кот свешивается с Dynamic Island на лапках")
+// Intent для кнопок в Dynamic Island (LiveActivityIntent)
+public struct PetCatLiveIntent: LiveActivityIntent {
+    public static var title: LocalizedStringResource = "Погладить кота"
+    public static var description = IntentDescription("Погладить котика AiCat на Dynamic Island")
     
     public static var openAppWhenRun: Bool = false
     
@@ -29,7 +29,23 @@ public struct HangCatIntent: AppIntent {
     
     @MainActor
     public func perform() async throws -> some IntentResult {
-        _ = CatActionHandler.shared.execute(action: "hang_on_island")
+        _ = TamagotchiManager.shared.petCat()
+        _ = CatActionHandler.shared.pet()
         return .result()
+    }
+}
+
+// Shortcut Provider для автоматического появления в Командах и Back Tap
+public struct AiCatShortcuts: AppShortcutsProvider {
+    public static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: WakeAiCatVoiceIntent(),
+            phrases: [
+                "Голос \(.applicationName)",
+                "Разбуди \(.applicationName)"
+            ],
+            shortTitle: "AiCat: Голос",
+            systemImageName: "mic.fill"
+        )
     }
 }

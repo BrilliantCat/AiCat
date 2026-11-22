@@ -14,6 +14,7 @@ public struct MainView: View {
     @State private var showCertificateInfo: Bool = false
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
+    @State private var showRAGManager: Bool = false
     
     @FocusState private var isInputFocused: Bool
     
@@ -78,6 +79,9 @@ public struct MainView: View {
         .sheet(isPresented: $showModelManager) {
             ModelManagerView()
         }
+        .sheet(isPresented: $showRAGManager) {
+            RAGManagerView()
+        }
         .alert(isPresented: $showCertificateInfo) {
             Alert(
                 title: Text("Обновление сертификата (7 дней)"),
@@ -131,6 +135,15 @@ public struct MainView: View {
             // Гардероб
             Button(action: { showWardrobe = true }) {
                 Image(systemName: "tshirt.fill")
+                    .foregroundColor(.cyan)
+                    .padding(7)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            
+            // Документы и база знаний RAG
+            Button(action: { showRAGManager = true }) {
+                Image(systemName: "doc.text.magnifyingglass")
                     .foregroundColor(.cyan)
                     .padding(7)
                     .background(Color.white.opacity(0.08))

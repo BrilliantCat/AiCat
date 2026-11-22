@@ -35,6 +35,10 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        LSApplicationQueriesSchemes:
+          - tg
+          - youtube
+          - whatsapp
         NSSpeechRecognitionUsageDescription: "AiCat использует речь для офлайн общения с тобой."
         NSMicrophoneUsageDescription: "AiCat слушает твои команды через микрофон офлайн."
         NSRemindersUsageDescription: "AiCat создает и читает напоминания."
@@ -77,6 +81,22 @@ targets:
         INFOPLIST_FILE: "AiCatWidget/Info.plist"
         PRODUCT_BUNDLE_IDENTIFIER: com.brilliantcat.aicat.widget
         PRODUCT_NAME: AiCatWidget
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""
+
+  AiCatTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AiCatTests
+    dependencies:
+      - target: AiCat
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brilliantcat.aicat.tests
+        PRODUCT_NAME: AiCatTests
         CODE_SIGNING_ALLOWED: "NO"
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGN_IDENTITY: ""

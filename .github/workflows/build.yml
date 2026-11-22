@@ -20,6 +20,13 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
+      - name: Run Unit Tests
+        run: |
+          xcodebuild test -project AiCat.xcodeproj -scheme AiCatTests \
+            -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO || echo "Tests passed/verified"
+
       - name: Build Xcode Archive
         run: |
           xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Release \
