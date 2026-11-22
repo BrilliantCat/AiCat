@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 public struct DebugLogView: View {
     @Environment(\.dismiss) private var dismiss

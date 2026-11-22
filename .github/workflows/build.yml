@@ -47,15 +47,16 @@ jobs:
         if: failure()
         run: |
           echo "=== XCODEBUILD FAILED: PRINTING ERROR LINES ==="
-          grep -C 5 -E "(error: |BUILD FAILED|\*\* ARCHIVE FAILED \*\*)" xcode_build.log || tail -n 150 xcode_build.log
+          grep -C 5 -E "(error: |BUILD FAILED|\*\* ARCHIVE FAILED \*\*)" *.log || tail -n 150 fast_build.log
           echo "==============================================="
 
       - name: Upload Build Log Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xcode_build_log
-          path: xcode_build.log
+          name: xcode_build_logs
+          path: "*.log"
+          if-no-files-found: ignore
 
       - name: Package Payload to IPA
         run: |
