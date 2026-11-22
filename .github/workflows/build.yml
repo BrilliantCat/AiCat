@@ -99,7 +99,7 @@ jobs:
             echo "::error::llama.framework is missing from the application archive"
             exit 1
           fi
-          xcrun lipo -verify_arch arm64 "$framework"
+          xcrun lipo "$framework" -verify_arch arm64
           xcrun otool -L "$app/AiCat"
           xcrun otool -L "$framework"
 
