@@ -224,7 +224,7 @@ public final class ToolRegistry {
             let certDays = await MainActor.run { CertificateWatchdog.shared.daysRemaining }
             let isModel = await MainActor.run { ModelManager.shared.isModelLoaded }
             let res = """
-            📊 СТАТУС AICAT (A17 PRO):
+            📊 СТАТУС AICAT:
             • Сытость: \(satiety)% 🐟
             • Счастье: \(happiness)% ❤️
             • Энергия: \(energy)% ⚡

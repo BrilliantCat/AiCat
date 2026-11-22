@@ -62,7 +62,7 @@ public struct AiCatLiveActivity: Widget {
                             .font(.caption)
                             .foregroundColor(.white)
                         Spacer()
-                        Text("A17 Pro")
+                        Text("Online 🐾")
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }

@@ -27,7 +27,7 @@ public struct CatActionState: Codable, Equatable {
         currentOutfit: "Черные кибер-очки",
         isHanging: false,
         moodEmoji: "😼",
-        statusText: "Наблюдаю за тобой из A17 Pro",
+        statusText: "Наблюдаю за тобой",
         executionToken: UUID().uuidString
     )
 }

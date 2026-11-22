@@ -9,7 +9,7 @@ public final class LiveActivityManager: ObservableObject {
     private init() {}
     
     // Запуск или переподключение к Live Activity
-    public func startOrUpdateActivity(status: String = "AiCat на посту в A17 Pro",
+    public func startOrUpdateActivity(status: String = "AiCat на посту",
                                      mood: String = "😼",
                                      action: String = "Наблюдаю",
                                      isHanging: Bool = false) {

@@ -51,7 +51,7 @@ public final class MusicTool: ObservableObject {
             
         default:
             playTonePattern(frequencies: [220.00, 277.18, 329.63, 440.00], noteDuration: 0.3, waveType: .sine)
-            return "Синтезировал новую мелодию в чипе A17 Pro."
+            return "Синтезировал новую мелодию в ретро-стиле."
         }
     }
     

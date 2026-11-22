@@ -30,7 +30,7 @@ public final class NotesTool: ObservableObject {
         let note = CatNote(title: title, content: content)
         notes.insert(note, at: 0)
         persist()
-        return "Записал в локальный дневник: «\(title)». Зашифровано и надежно сохранено в памяти A17 Pro."
+        return "Записал в локальный дневник: «\(title)». Надежно сохранено в памяти AiCat."
     }
     
     public func searchNotes(query: String) -> [CatNote] {

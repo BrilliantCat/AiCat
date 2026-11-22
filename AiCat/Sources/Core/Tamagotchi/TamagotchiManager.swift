@@ -77,7 +77,7 @@ public final class TamagotchiManager: ObservableObject {
         CatActionHandler.shared.state.statusText = "Хрустит тунцом (\(satiety)%)"
         LiveActivityManager.shared.update(status: "Сытость: \(satiety)%", mood: "🐟", action: "Ест рыбку")
         
-        return "*Хрум-хрум-хрум*. М-м-м, свежий тунец! Сытость \(satiety)%. Вот теперь процессор A17 Pro мурчит на полную мощность, кожаный!"
+        return "*Хрум-хрум-хрум*. М-м-м, свежий тунец! Сытость \(satiety)%. Вот теперь я сыт, доволен и мурчу на полную громкость, кожаный!"
     }
     
     // Погладить кота (ласка и мурчание)

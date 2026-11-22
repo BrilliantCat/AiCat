@@ -20,7 +20,7 @@ public struct AiCatHomeScreenWidgetProvider: TimelineProvider {
     }
 
     public func getTimeline(in context: Context, completion: @escaping (Timeline<AiCatHomeScreenEntry>) -> Void) {
-        let entry = AiCatHomeScreenEntry(date: Date(), statusText: "AiCat на страже в A17 Pro", moodEmoji: "😼", satiety: 85, happiness: 90)
+        let entry = AiCatHomeScreenEntry(date: Date(), statusText: "AiCat на страже", moodEmoji: "😼", satiety: 85, happiness: 90)
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(60 * 15)))
         completion(timeline)
     }
@@ -98,7 +98,7 @@ public struct AiCatHomeScreenWidgetView: View {
                 VStack(spacing: 6) {
                     Text(entry.moodEmoji)
                         .font(.system(size: 36))
-                    Text("A17 Pro")
+                    Text("Online 🐾")
                         .font(.caption2)
                         .foregroundColor(.gray)
                 }

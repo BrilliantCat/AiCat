@@ -112,7 +112,7 @@ public struct MainView: View {
                     Text(catHandler.state.moodEmoji)
                         .font(.headline)
                 }
-                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "A17 Pro Офлайн ядро")
+                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "AiCat Офлайн ядро")
                     .font(.caption2)
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
             }
