@@ -29,7 +29,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee fast_build.log || (echo "=== SYNTAX/TYPE ERROR DETECTED ===" && grep -C 3 -E "(error: |BUILD FAILED)" fast_build.log && exit 65)
+            build 2>&1 | tee fast_build.log || {
+              echo "=== SYNTAX/TYPE ERROR DETECTED ==="
+              grep -C 2 -E "(error: |BUILD FAILED)" fast_build.log || true
+              grep -E "error: " fast_build.log | head -n 5 | while IFS= read -r line; do
+                echo "::error::$line"
+              done
+              exit 65
+            }
 
       - name: Build Xcode Archive
         run: |
@@ -41,14 +48,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_ENTITLEMENTS="" 2>&1 | tee xcode_build.log
-
-      - name: Inspect Build Failure
-        if: failure()
-        run: |
-          echo "=== XCODEBUILD FAILED: PRINTING ERROR LINES ==="
-          grep -C 5 -E "(error: |BUILD FAILED|\*\* ARCHIVE FAILED \*\*)" *.log || tail -n 150 fast_build.log
-          echo "==============================================="
+            CODE_SIGNING_ENTITLEMENTS="" 2>&1 | tee xcode_build.log || {
+              echo "=== ARCHIVE FAILED ==="
+              grep -C 2 -E "(error: |BUILD FAILED)" xcode_build.log || true
+              grep -E "error: " xcode_build.log | head -n 5 | while IFS= read -r line; do
+                echo "::error::$line"
+              done
+              exit 65
+            }
 
       - name: Upload Build Log Artifact
         if: always()

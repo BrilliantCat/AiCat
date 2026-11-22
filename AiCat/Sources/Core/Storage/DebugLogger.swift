@@ -40,7 +40,6 @@ public struct LogEntry: Identifiable, Codable {
     }
 }
 
-@MainActor
 public final class DebugLogger: ObservableObject {
     public static let shared = DebugLogger()
     
@@ -62,18 +61,23 @@ public final class DebugLogger: ObservableObject {
     
     public func log(_ message: String, level: LogLevel = .info, tag: String = "AiCat") {
         let entry = LogEntry(level: level, message: message, tag: tag)
-        entries.append(entry)
-        if entries.count > maxEntries {
-            entries.removeFirst(entries.count - maxEntries)
-        }
-        
         let line = "[\(entry.formattedTime)] [\(level.rawValue)] [\(tag)] \(message)\n"
         print(line, terminator: "")
         appendToFile(line)
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.entries.append(entry)
+            if self.entries.count > self.maxEntries {
+                self.entries.removeFirst(self.entries.count - self.maxEntries)
+            }
+        }
     }
     
     public func clear() {
-        entries.removeAll()
+        DispatchQueue.main.async { [weak self] in
+            self?.entries.removeAll()
+        }
         if let url = logFileURL {
             try? FileManager.default.removeItem(at: url)
         }
@@ -93,13 +97,16 @@ public final class DebugLogger: ObservableObject {
             }
         }
         if kerr == KERN_SUCCESS {
-            currentMemoryMB = Double(info.resident_size) / (1024.0 * 1024.0)
+            let mb = Double(info.resident_size) / (1024.0 * 1024.0)
+            DispatchQueue.main.async { [weak self] in
+                self?.currentMemoryMB = mb
+            }
         }
     }
     
     private func startMemoryMonitoring() {
-        memoryTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        DispatchQueue.main.async { [weak self] in
+            self?.memoryTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
                 self?.updateMemoryUsage()
             }
         }
