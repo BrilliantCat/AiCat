@@ -30,14 +30,10 @@ public struct AiCatHomeScreenWidgetView: View {
     var entry: AiCatHomeScreenWidgetProvider.Entry
     @Environment(\.widgetFamily) var family
 
+    @ViewBuilder
     public var body: some View {
-        if #available(iOS 17.0, *) {
-            content
-                .containerBackground(Color(red: 0.1, green: 0.11, blue: 0.15), for: .widget)
-        } else {
-            content
-                .background(Color(red: 0.1, green: 0.11, blue: 0.15))
-        }
+        content
+            .containerBackground(Color(red: 0.1, green: 0.11, blue: 0.15), for: .widget)
     }
     
     @ViewBuilder

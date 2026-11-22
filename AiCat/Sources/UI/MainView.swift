@@ -92,7 +92,7 @@ public struct MainView: View {
         .onAppear {
             self.chatMessages = ChatStorage.shared.loadMessages()
         }
-        .onChange(of: speechRecognizer.transcribedText) { newText in
+        .onChange(of: speechRecognizer.transcribedText) { _, newText in
             if speechRecognizer.isRecording && !newText.isEmpty {
                 self.inputText = newText
             }
@@ -413,7 +413,7 @@ public struct MainView: View {
             .onTapGesture {
                 isInputFocused = false
             }
-            .onChange(of: chatMessages.count) { _ in
+            .onChange(of: chatMessages.count) { _, _ in
                 if let last = chatMessages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }

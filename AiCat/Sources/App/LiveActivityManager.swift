@@ -57,7 +57,8 @@ public final class LiveActivityManager: ObservableObject {
     public func endAllActivities() {
         for activity in Activity<AiCatAttributes>.activities {
             Task {
-                await activity.end(nil, dismissalPolicy: .immediate)
+                let emptyState: ActivityContent<AiCatAttributes.ContentState>? = nil
+                await activity.end(emptyState, dismissalPolicy: .immediate)
             }
         }
         currentActivity = nil
