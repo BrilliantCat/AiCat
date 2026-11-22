@@ -2,8 +2,8 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-public struct AiCatLiveActivity: Widget {
-    public init() {}
+struct AiCatLiveActivity: Widget {
+    init() {}
     
     public var body: some WidgetConfiguration {
         ActivityConfiguration(for: AiCatAttributes.self) { context in

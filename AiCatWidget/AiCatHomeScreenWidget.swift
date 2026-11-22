@@ -1,37 +1,51 @@
 import WidgetKit
 import SwiftUI
 
-public struct AiCatHomeScreenEntry: TimelineEntry {
-    public let date: Date
-    public let statusText: String
-    public let moodEmoji: String
-    public let satiety: Int
-    public let happiness: Int
+struct AiCatHomeScreenEntry: TimelineEntry {
+    let date: Date
+    let statusText: String
+    let moodEmoji: String
+    let satiety: Int
+    let happiness: Int
+    
+    init(date: Date = Date(), statusText: String, moodEmoji: String, satiety: Int, happiness: Int) {
+        self.date = date
+        self.statusText = statusText
+        self.moodEmoji = moodEmoji
+        self.satiety = satiety
+        self.happiness = happiness
+    }
 }
 
-public struct AiCatHomeScreenWidgetProvider: TimelineProvider {
-    public func placeholder(in context: Context) -> AiCatHomeScreenEntry {
+struct AiCatHomeScreenWidgetProvider: TimelineProvider {
+    init() {}
+
+    func placeholder(in context: Context) -> AiCatHomeScreenEntry {
         AiCatHomeScreenEntry(date: Date(), statusText: "Мурчит на солнышке", moodEmoji: "😼", satiety: 85, happiness: 90)
     }
 
-    public func getSnapshot(in context: Context, completion: @escaping (AiCatHomeScreenEntry) -> Void) {
+    func getSnapshot(in context: Context, completion: @escaping (AiCatHomeScreenEntry) -> Void) {
         let entry = AiCatHomeScreenEntry(date: Date(), statusText: "Готов к командам", moodEmoji: "😼", satiety: 85, happiness: 90)
         completion(entry)
     }
 
-    public func getTimeline(in context: Context, completion: @escaping (Timeline<AiCatHomeScreenEntry>) -> Void) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<AiCatHomeScreenEntry>) -> Void) {
         let entry = AiCatHomeScreenEntry(date: Date(), statusText: "AiCat на страже", moodEmoji: "😼", satiety: 85, happiness: 90)
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(60 * 15)))
         completion(timeline)
     }
 }
 
-public struct AiCatHomeScreenWidgetView: View {
+struct AiCatHomeScreenWidgetView: View {
     var entry: AiCatHomeScreenWidgetProvider.Entry
     @Environment(\.widgetFamily) var family
 
+    init(entry: AiCatHomeScreenWidgetProvider.Entry) {
+        self.entry = entry
+    }
+
     @ViewBuilder
-    public var body: some View {
+    var body: some View {
         content
             .containerBackground(Color(red: 0.1, green: 0.11, blue: 0.15), for: .widget)
     }
@@ -104,10 +118,12 @@ public struct AiCatHomeScreenWidgetView: View {
     }
 }
 
-public struct AiCatHomeScreenWidget: Widget {
-    public let kind: String = "AiCatHomeScreenWidget"
+struct AiCatHomeScreenWidget: Widget {
+    let kind: String = "AiCatHomeScreenWidget"
 
-    public var body: some WidgetConfiguration {
+    init() {}
+
+    var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: AiCatHomeScreenWidgetProvider()) { entry in
             AiCatHomeScreenWidgetView(entry: entry)
         }
