@@ -119,7 +119,7 @@ jobs:
           codesign --force --sign - --timestamp=none --entitlements AiCatWidget/AiCatWidget.entitlements "$widget"
           codesign --force --sign - --timestamp=none --entitlements AiCat/AiCat.entitlements "$app"
           for bundle in "$widget" "$app"; do
-            codesign -d --entitlements - --xml "$bundle" | python3 -c 'import plistlib, sys; assert "group.com.brilliantcat.aicat" in plistlib.load(sys.stdin.buffer)["com.apple.security.application-groups"]'
+            codesign -d --entitlements - --xml "$bundle" | python3 -c 'import plistlib, sys; assert "group.com.brilliantcat.aicat" in plistlib.loads(sys.stdin.buffer.read())["com.apple.security.application-groups"]'
           done
           cd build
           test -f Payload/AiCat.app/Frameworks/llama.framework/llama
