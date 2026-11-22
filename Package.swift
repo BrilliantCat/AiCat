@@ -9,8 +9,7 @@ let package = Package(
     products: [
         .library(
             name: "AiCatCore",
-            targets: [
-        .binaryTarget(name: "llama", path: "Frameworks/llama.xcframework"),"AiCatCore"]
+            targets: ["AiCatCore"]
         )
     ],
     dependencies: [

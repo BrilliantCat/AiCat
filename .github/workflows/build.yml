@@ -51,11 +51,16 @@ jobs:
             }
 
       - name: Run unit tests
+        timeout-minutes: 15
         run: |
           set -o pipefail
           simulator=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
           xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Debug \
             -destination "platform=iOS Simulator,id=$simulator" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 60 \
+            -maximum-test-execution-time-allowance 120 \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee tests.log
 
       - name: Build Xcode Archive
@@ -85,12 +90,28 @@ jobs:
           path: "*.log"
           if-no-files-found: ignore
 
+      - name: Verify embedded inference framework
+        run: |
+          set -euo pipefail
+          app="build/AiCat.xcarchive/Products/Applications/AiCat.app"
+          framework="$app/Frameworks/llama.framework/llama"
+          if [ ! -f "$framework" ]; then
+            echo "::error::llama.framework is missing from the application archive"
+            exit 1
+          fi
+          xcrun lipo -verify_arch arm64 "$framework"
+          xcrun otool -L "$app/AiCat"
+          xcrun otool -L "$framework"
+
       - name: Package Payload to IPA
         run: |
           mkdir -p build/Payload
           cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
           cd build
+          test -f Payload/AiCat.app/Frameworks/llama.framework/llama
           zip -r AiCat.ipa Payload/
+          unzip -tq AiCat.ipa
+          unzip -l AiCat.ipa "Payload/AiCat.app/Frameworks/llama.framework/llama"
           ls -lh AiCat.ipa
 
       - name: Upload IPA Artifact

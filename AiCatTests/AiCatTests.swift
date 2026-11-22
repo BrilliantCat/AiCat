@@ -45,7 +45,12 @@ final class AiCatTests: XCTestCase {
 
     @MainActor
     func testLessonPauseAndAdvance() {
-        let coach = YogaCoachTool.shared
+        let suite = "AiCatTests.lesson.\(UUID().uuidString)"
+        let storage = UserDefaults(suiteName: suite)!
+        defer { storage.removePersistentDomain(forName: suite) }
+        let coach = YogaCoachTool(storage: storage, speak: { _ in },
+                                 updateStatus: { _, _ in }, stopFitness: {})
+        defer { _ = coach.stopWorkout() }
         _ = coach.startWorkout(type: "breathing")
         coach.pause()
         let remaining = coach.remainingSeconds
@@ -54,6 +59,12 @@ final class AiCatTests: XCTestCase {
         XCTAssertTrue(coach.isPaused)
         XCTAssertEqual(coach.currentExerciseIndex, 1)
         XCTAssertGreaterThan(remaining, 0)
+        let restored = YogaCoachTool(storage: storage, speak: { _ in },
+                                    updateStatus: { _, _ in }, stopFitness: {})
+        XCTAssertTrue(restored.isSessionActive)
+        XCTAssertTrue(restored.isPaused)
+        XCTAssertEqual(restored.currentExerciseIndex, 1)
+        XCTAssertEqual(restored.remainingSeconds, coach.remainingSeconds)
         coach.resume()
         XCTAssertFalse(coach.isPaused)
         _ = coach.stopWorkout()

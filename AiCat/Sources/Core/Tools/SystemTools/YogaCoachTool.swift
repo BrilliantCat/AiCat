@@ -49,6 +49,10 @@ public final class YogaCoachTool: ObservableObject {
     private var timer: Timer?
     private var deadline: Date?
     private let storageKey = "aicat.lesson"
+    private let storage: UserDefaults
+    private let speak: (String?) -> Void
+    private let updateStatus: (String, String) -> Void
+    private let stopFitness: () -> Void
 
     public var routine: [YogaExercise] {
         switch plan {
@@ -70,8 +74,23 @@ public final class YogaCoachTool: ObservableObject {
         }
     }
 
-    private init() {
-        if let saved = UserDefaults.standard.dictionary(forKey: storageKey),
+    private convenience init() {
+        self.init(storage: .standard, speak: { text in
+            if let text { CatSpeechSynthesizer.shared.speak(text: text) }
+            else { CatSpeechSynthesizer.shared.stop() }
+        }, updateStatus: { status, action in
+            CatActionHandler.shared.state.statusText = status
+            LiveActivityManager.shared.update(status: status, mood: action == "На связи" ? "😼" : "🧘‍♂️", action: action)
+        }, stopFitness: { CatFitnessCoach.shared.stopWorkout() })
+    }
+
+    init(storage: UserDefaults, speak: @escaping (String?) -> Void,
+         updateStatus: @escaping (String, String) -> Void, stopFitness: @escaping () -> Void) {
+        self.storage = storage
+        self.speak = speak
+        self.updateStatus = updateStatus
+        self.stopFitness = stopFitness
+        if let saved = storage.dictionary(forKey: storageKey),
            let type = saved["plan"] as? String,
            let index = saved["index"] as? Int,
            let seconds = saved["seconds"] as? Int {
@@ -88,7 +107,7 @@ public final class YogaCoachTool: ObservableObject {
     public var currentExercise: YogaExercise { routine[currentExerciseIndex] }
 
     public func startWorkout(type: String = "yoga") -> String {
-        CatFitnessCoach.shared.stopWorkout()
+        stopFitness()
         timer?.invalidate()
         plan = ["yoga", "breathing", "mobility", "plank"].contains(type) ? type : "yoga"
         currentExerciseIndex = 0
@@ -118,9 +137,8 @@ public final class YogaCoachTool: ObservableObject {
 
     private func announce() {
         let status = "\(currentExercise.name) · \(currentExerciseIndex + 1)/\(routine.count)"
-        CatActionHandler.shared.state.statusText = status
-        LiveActivityManager.shared.update(status: status, mood: "🧘‍♂️", action: isPaused ? "Пауза" : "Занятие")
-        CatSpeechSynthesizer.shared.speak(text: "\(currentExercise.name). \(currentExercise.catComment)")
+        updateStatus(status, isPaused ? "Пауза" : "Занятие")
+        speak("\(currentExercise.name). \(currentExercise.catComment)")
     }
 
     public func pause() {
@@ -131,13 +149,13 @@ public final class YogaCoachTool: ObservableObject {
         timer = nil
         deadline = nil
         persist()
-        CatSpeechSynthesizer.shared.stop()
-        LiveActivityManager.shared.update(status: currentExercise.name, mood: "🧘‍♂️", action: "Пауза")
+        speak(nil)
+        updateStatus(currentExercise.name, "Пауза")
     }
 
     public func resume() {
         guard isSessionActive, isPaused else { return }
-        CatFitnessCoach.shared.stopWorkout()
+        stopFitness()
         isPaused = false
         beginStep()
     }
@@ -155,7 +173,7 @@ public final class YogaCoachTool: ObservableObject {
     }
 
     private func persist() {
-        UserDefaults.standard.set(["plan": plan, "index": currentExerciseIndex,
+        storage.set(["plan": plan, "index": currentExerciseIndex,
                                    "seconds": remainingSeconds], forKey: storageKey)
     }
 
@@ -166,14 +184,14 @@ public final class YogaCoachTool: ObservableObject {
         timer?.invalidate()
         timer = nil
         deadline = nil
-        UserDefaults.standard.removeObject(forKey: storageKey)
+        storage.removeObject(forKey: storageKey)
         let message = completed ? "Занятие завершено, кожаный! Отличная работа." : "Остановил занятие."
         if completed {
-            UserDefaults.standard.set(UserDefaults.standard.integer(forKey: "aicat.completedLessons") + 1,
+            storage.set(storage.integer(forKey: "aicat.completedLessons") + 1,
                                       forKey: "aicat.completedLessons")
         }
-        LiveActivityManager.shared.update(status: message, mood: "😼", action: "На связи")
-        CatSpeechSynthesizer.shared.speak(text: message)
+        updateStatus(message, "На связи")
+        speak(message)
         return message
     }
 }
