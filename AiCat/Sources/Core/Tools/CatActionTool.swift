@@ -39,10 +39,10 @@ public final class CatActionHandler: ObservableObject {
     
     @Published public var state: CatActionState = .default {
         didSet {
-            UserDefaults.standard.set(state.isDressed, forKey: "aicat.dressed")
-            UserDefaults.standard.set(state.currentOutfit, forKey: "aicat.outfit")
             if oldValue.isDressed != state.isDressed || oldValue.currentOutfit != state.currentOutfit {
-                var snapshot = CatSnapshot.load()
+                UserDefaults.standard.set(state.isDressed, forKey: "aicat.dressed")
+                UserDefaults.standard.set(state.currentOutfit, forKey: "aicat.outfit")
+                var snapshot = CatSnapshot.load().projected(at: Date())
                 snapshot.outfit = state.isDressed ? state.currentOutfit : nil
                 snapshot.save()
             }

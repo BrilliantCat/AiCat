@@ -35,13 +35,15 @@ public struct WardrobeSheet: View {
                             .foregroundColor(.white)
                             .padding(.top)
                         
-                        Text("Выбери прикид для своего кота. Он мгновенно примерит его в 3D и на Dynamic Island!")
+                        Text("Выбери, в чём кот будет гулять по комнате.")
                             .font(.subheadline)
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                         
                         ForEach(items, id: \.1) { emoji, title, desc in
+                            let equipped = catHandler.state.isDressed
+                                ? catHandler.state.currentOutfit == title : title == "Естественная шубка"
                             HStack(spacing: 14) {
                                 Text(emoji)
                                     .font(.system(size: 36))
@@ -69,13 +71,13 @@ public struct WardrobeSheet: View {
                                     let generator = UINotificationFeedbackGenerator()
                                     generator.notificationOccurred(.success)
                                 }) {
-                                    Text(catHandler.state.currentOutfit == title ? "Надет" : "Надеть")
+                                    Text(equipped ? "Выбрано" : "Надеть")
                                         .font(.caption)
                                         .bold()
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
-                                        .background(catHandler.state.currentOutfit == title ? Color.green.opacity(0.3) : Color.cyan.opacity(0.2))
-                                        .foregroundColor(catHandler.state.currentOutfit == title ? .green : .cyan)
+                                        .background(equipped ? Color.green.opacity(0.3) : Color.cyan.opacity(0.2))
+                                        .foregroundColor(equipped ? .green : .cyan)
                                         .cornerRadius(12)
                                 }
                             }

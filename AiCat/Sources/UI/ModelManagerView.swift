@@ -109,7 +109,7 @@ public struct ModelManagerView: View {
                         
                         // Инструкция по установке файлов
                         VStack(alignment: .leading, spacing: 12) {
-                            if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: CatSnapshot.group) == nil {
+                            if CatSnapshot.sharedDefaults == nil {
                                 Text("Общее хранилище виджета недоступно. Проверь сохранение App Groups при подписи SideStore.")
                                     .font(.caption).foregroundColor(.orange)
                             }

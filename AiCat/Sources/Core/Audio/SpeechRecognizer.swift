@@ -3,6 +3,7 @@ import Foundation
 import Speech
 import AVFoundation
 
+@MainActor
 public final class OfflineSpeechRecognizer: ObservableObject {
     public static let shared = OfflineSpeechRecognizer()
     
@@ -14,6 +15,8 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var hasTap = false
+    private var ownsSession = false
     
     private init() {
         // Подбираем русский распознаватель речи
@@ -57,9 +60,10 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        ownsSession = true
         
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let request = recognitionRequest else { return }
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        recognitionRequest = request
         
         // Включаем частичные результаты в реальном времени
         request.shouldReportPartialResults = true
@@ -67,62 +71,48 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         
         let inputNode = audioEngine.inputNode
         let busFormat = inputNode.outputFormat(forBus: 0)
-        let format = busFormat.sampleRate > 0 ? busFormat : AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
-        
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        guard busFormat.sampleRate > 0, busFormat.channelCount > 0 else {
+            stopListening()
+            throw NSError(domain: "AiCat", code: 3, userInfo: [NSLocalizedDescriptionKey: "Микрофон сейчас недоступен."])
         }
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: busFormat) { buffer, _ in request.append(buffer) }
+        hasTap = true
         
         audioEngine.prepare()
-        try audioEngine.start()
-        
-        DispatchQueue.main.async {
-            self.isRecording = true
-            self.transcribedText = ""
-            self.errorMessage = nil
+        do { try audioEngine.start() }
+        catch {
+            stopListening()
+            throw error
         }
+        isRecording = true
+        transcribedText = ""
+        errorMessage = nil
         
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self = self else { return }
-            
-            if let result = result {
-                let recognized = result.bestTranscription.formattedString
-                DispatchQueue.main.async {
-                    self.transcribedText = recognized
-                }
-            }
-            
-            if let error = error {
-                let nsError = error as NSError
-                // Код 216 - нормальная остановка пользователем
-                if nsError.domain != "kAFAssistantErrorDomain" || nsError.code != 216 {
-                    print("Speech recognition warning: \(error.localizedDescription)")
-                }
-                self.stopListening()
-            }
-            
-            if result?.isFinal ?? false {
-                self.stopListening()
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self, weak request] result, error in
+            DispatchQueue.main.async {
+                guard let self, let request, self.recognitionRequest === request else { return }
+                if let result { self.transcribedText = result.bestTranscription.formattedString }
+                if let error { self.errorMessage = error.localizedDescription }
+                if error != nil || result?.isFinal == true { self.stopListening() }
             }
         }
     }
     
     public func stopListening() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
+        if audioEngine.isRunning { audioEngine.stop() }
+        if hasTap {
             audioEngine.inputNode.removeTap(onBus: 0)
+            hasTap = false
         }
         recognitionRequest?.endAudio()
         recognitionRequest = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         
-        DispatchQueue.main.async {
-            self.isRecording = false
+        isRecording = false
+        if ownsSession {
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            ownsSession = false
         }
-        
-        // Освобождаем сессию записи
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }

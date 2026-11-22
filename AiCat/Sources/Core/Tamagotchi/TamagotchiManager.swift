@@ -11,6 +11,7 @@ public final class TamagotchiManager: ObservableObject {
     @Published public var happiness: Int = 90  // Счастье 0-100%
     @Published public var energy: Int = 95     // Энергия 0-100%
     @Published public var isSleeping: Bool = false
+    @Published private(set) var isRoaming = true
     
     private let defaults = UserDefaults.standard
     private let keySatiety = "aicat_tamagotchi_satiety"
@@ -20,6 +21,12 @@ public final class TamagotchiManager: ObservableObject {
     private let keyLastUpdate = "aicat_tamagotchi_last_update"
     
     private init() {
+        // SideStore may restore the original group after a period of local-only care.
+        if let shared = CatSnapshot.sharedDefaults, let local = defaults.data(forKey: "catSnapshot"),
+           let lastLocal = try? JSONDecoder().decode(CatSnapshot.self, from: local) {
+            let stored = shared.data(forKey: "catSnapshot").flatMap { try? JSONDecoder().decode(CatSnapshot.self, from: $0) }
+            if lastLocal.date > (stored?.date ?? .distantPast) { shared.set(local, forKey: "catSnapshot") }
+        }
         loadStateAndApplyDecay()
     }
     
@@ -44,6 +51,7 @@ public final class TamagotchiManager: ObservableObject {
     }
 
     public func saveState() {
+        isRoaming = false
         var snapshot = CatSnapshot.load()
         snapshot.date = Date()
         snapshot.satiety = satiety
@@ -54,97 +62,90 @@ public final class TamagotchiManager: ObservableObject {
         WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
     }
 
-    // Покормить кота рыбкой 🐟
-    public func feedFish() -> String {
-        loadStateAndApplyDecay()
-        satiety = min(100, satiety + 30)
-        happiness = min(100, happiness + 15)
-        saveState()
-        
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        
-        CatActionHandler.shared.state.moodEmoji = "🐟"
-        CatActionHandler.shared.state.statusText = "Хрустит тунцом (\(satiety)%)"
-        LiveActivityManager.shared.update(status: "Сытость: \(satiety)%", mood: "🐟", action: "Ест рыбку")
-        
-        return "*Хрум-хрум-хрум*. М-м-м, свежий тунец! Сытость \(satiety)%. Вот теперь я сыт, доволен и мурчу на полную громкость, кожаный!"
+    func care(_ care: CatCare) -> String {
+        var cat = CatSnapshot.load().projected(at: Date())
+        guard let reply = cat.apply(care) else {
+            CatActionHandler.shared.state.statusText = cat.sleeping ? "Спит. Поиграем после сна" : "Устал и хочет отдохнуть"
+            return "Кожаный, сначала дай мне выспаться."
+        }
+        commit(cat)
+        if UIApplication.shared.applicationState == .active {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        }
+        return reply
     }
-    
-    // Погладить кота (ласка и мурчание)
-    public func petCat() -> String {
-        loadStateAndApplyDecay()
-        happiness = min(100, happiness + 20)
-        saveState()
-        
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        CatActionHandler.shared.state.executionToken = UUID().uuidString
-        CatActionHandler.shared.state.currentAction = .idle
-        CatActionHandler.shared.state.moodEmoji = "😻"
-        CatActionHandler.shared.state.statusText = "Мурчит от ласки (\(happiness)%)"
-        LiveActivityManager.shared.update(status: "Счастье: \(happiness)%", mood: "😻", action: "Мурчит")
-        
-        return "*М-у-у-у-р-р-р-р-р-р*. Ладно, признаю, это было приятно. Счастье кота: \(happiness)%!"
-    }
-    
-    // Уложить спать
+
+    public func feedFish() -> String { care(.feed) }
+    public func petCat() -> String { care(.pet) }
+    public func play() -> String { care(.play) }
+
     public func sleep() -> String {
-        loadStateAndApplyDecay()
-        isSleeping = true
-        CatActionHandler.shared.state.currentAction = .sleep
-        CatActionHandler.shared.state.executionToken = UUID().uuidString
-        saveState()
-        
-        CatActionHandler.shared.state.moodEmoji = "💤"
-        CatActionHandler.shared.state.statusText = "Спит и восстанавливает энергию"
-        LiveActivityManager.shared.update(status: "Спит...", mood: "💤", action: "Сон")
-        
-        return "*Свернулся клубком*. Восстанавливаю тактовую частоту нейросети... z-z-z."
+        var cat = CatSnapshot.load().projected(at: Date())
+        cat.sleeping = true
+        cat.action = "sleep"
+        cat.actionUntil = cat.date.addingTimeInterval(3600)
+        commit(cat)
+        return "Свернусь клубком. Если понадоблюсь — разбуди."
     }
-    
-    // Разбудить
+
     public func wake() -> String {
-        loadStateAndApplyDecay()
-        isSleeping = false
-        CatActionHandler.shared.state.currentAction = .idle
-        CatActionHandler.shared.state.executionToken = UUID().uuidString
-        saveState()
-        
-        CatActionHandler.shared.state.moodEmoji = "😼"
-        CatActionHandler.shared.state.statusText = "Бодр и готов к делам"
-        LiveActivityManager.shared.update(status: "Бодр и готов", mood: "😼", action: "На связи")
-        
-        return "*Потянулся, зевнул и поправил черные очки*. Я проснулся, кожаный! Что за задачи на повестке?"
+        var cat = CatSnapshot.load().projected(at: Date())
+        cat.sleeping = false
+        cat.action = "idle"
+        cat.actionUntil = cat.date.addingTimeInterval(120)
+        commit(cat)
+        return "Потянулся. Я здесь, кожаный."
     }
-    
-    public func play() -> String {
-        loadStateAndApplyDecay()
-        guard energy >= 20, !isSleeping else { return "Кожаный, сначала дай мне выспаться." }
-        happiness = min(100, happiness + 15)
-        energy = max(10, energy - 8)
-        satiety = max(10, satiety - 3)
-        saveState()
-        _ = CatActionHandler.shared.execute(action: "somersault")
-        LiveActivityManager.shared.update(status: "Играет с клубком", mood: "🧶", action: "Игра")
-        return "Поймал клубок! Ещё раунд, кожаный?"
+
+    private func commit(_ cat: CatSnapshot, caption: String? = nil) {
+        cat.save()
+        satiety = cat.satiety
+        happiness = cat.happiness
+        energy = cat.energy
+        isSleeping = cat.sleeping
+        isRoaming = false
+        var state = CatActionHandler.shared.state
+        state.currentAction = cat.sleeping ? .sleep : .idle
+        state.isHanging = false
+        state.executionToken = UUID().uuidString
+        state.moodEmoji = cat.mood
+        state.statusText = caption ?? cat.label
+        CatActionHandler.shared.state = state
+        WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
+        LiveActivityManager.shared.startOrUpdateActivity(status: state.statusText, mood: cat.mood,
+                                                         action: cat.label, recordAction: false)
     }
 
     public func refreshAutonomousLife() {
         loadStateAndApplyDecay()
         let cat = CatSnapshot.load().projected(at: Date())
+        isRoaming = Date() >= cat.actionUntil
         CatActionHandler.shared.state.moodEmoji = cat.mood
         CatActionHandler.shared.state.statusText = cat.label
-        if Date() >= cat.actionUntil {
-            let next: CatActionType = cat.sleeping ? .sleep : .idle
-            if CatActionHandler.shared.state.currentAction != next {
-                CatActionHandler.shared.state.currentAction = next
-                CatActionHandler.shared.state.executionToken = UUID().uuidString
-            }
+        let oldAction = CatActionHandler.shared.state.currentAction
+        let performingTrick = [.somersault, .hangOnIsland, .dressUp].contains(oldAction) && Date() < cat.actionUntil
+        let next: CatActionType = cat.action == "sleep" ? .sleep : .idle
+        if !performingTrick && oldAction != next {
+            CatActionHandler.shared.state.currentAction = next
+            CatActionHandler.shared.state.executionToken = UUID().uuidString
         }
         LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood,
                                                          action: cat.label, recordAction: false)
+    }
+
+    func didBecomeActive() {
+        let lastVisit = defaults.object(forKey: "aicat.lastDeparture") as? Date
+        defaults.removeObject(forKey: "aicat.lastDeparture")
+        var cat = CatSnapshot.load().projected(at: Date())
+        if let lastVisit, Date().timeIntervalSince(lastVisit) >= 1800,
+           !cat.sleeping, Date() >= cat.actionUntil {
+            cat.happiness = min(100, cat.happiness + 4)
+            cat.action = "purr"
+            cat.actionUntil = cat.date.addingTimeInterval(120)
+            commit(cat, caption: "Встречает тебя и мурчит")
+        } else {
+            refreshAutonomousLife()
+        }
     }
 
     // Формирование системного контекста настроения кота для LLM-промпта

@@ -4,12 +4,21 @@ import SwiftUI
 
 struct AiCatLiveActivity: Widget {
     init() {}
+
+    private func islandState(for mood: String) -> String {
+        switch mood {
+        case "💤": return "sleep"
+        case "🤔", "🧠": return "think"
+        default: return "peek"
+        }
+    }
     
     public var body: some WidgetConfiguration {
         ActivityConfiguration(for: AiCatAttributes.self) { context in
+            let mood = context.isStale ? "😼" : context.state.moodEmoji
             // Экран блокировки (Lock Screen Banner)
             HStack(spacing: 14) {
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
+                CatPicture(scene: CatSnapshot.scene(mood: mood), outfit: context.state.outfit)
                     .frame(width: 64, height: 64)
                     .padding(8)
                     .background(Color.white.opacity(0.1))
@@ -23,11 +32,11 @@ struct AiCatLiveActivity: Widget {
                             .foregroundColor(.white)
                         Text("•")
                             .foregroundColor(.gray)
-                        Text(context.state.currentAction)
+                        Text(context.isStale ? "В комнате" : context.state.currentAction)
                             .font(.subheadline)
                             .foregroundColor(.cyan)
                     }
-                    Text(context.state.statusMessage)
+                    Text(context.isStale ? "Загляни к коту" : context.state.statusMessage)
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
@@ -39,11 +48,12 @@ struct AiCatLiveActivity: Widget {
             .activityBackgroundTint(Color(red: 0.08, green: 0.09, blue: 0.12).opacity(0.95))
             
         } dynamicIsland: { context in
-            DynamicIsland {
+            let mood = context.isStale ? "😼" : context.state.moodEmoji
+            return DynamicIsland {
                 // Развернутый вид (по долгому тапу на Dynamic Island)
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 6) {
-                        CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
+                        CatPicture(scene: CatSnapshot.scene(mood: mood), outfit: context.state.outfit)
                             .frame(width: 40, height: 40)
                         Text("AiCat")
                             .font(.headline)
@@ -52,34 +62,39 @@ struct AiCatLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.currentAction)
+                    Text(context.isStale ? "В комнате" : context.state.currentAction)
                         .font(.caption)
                         .bold()
                         .foregroundColor(.cyan)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
-                        Text(context.state.statusMessage)
+                        Text(context.isStale ? "Загляни к коту" : context.state.statusMessage)
                             .font(.caption)
                             .foregroundColor(.white)
                         Spacer()
-                        Text("Офлайн 🐾")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
+                        Button(intent: CareForCatIntent(.pet)) { Image(systemName: "heart.fill") }
+                            .accessibilityLabel("Погладить")
+                        Button(intent: CareForCatIntent(.feed)) { Image(systemName: "fish.fill") }
+                            .accessibilityLabel("Покормить")
                     }
                     .padding(.top, 4)
                 }
             } compactLeading: {
                 // Левая часть компактного Dynamic Island
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "leading", outfit: context.state.outfit)
-                    .frame(width: 26, height: 26)
+                CatPicture(scene: CatSnapshot.scene(mood: mood), islandSide: "leading", outfit: context.state.outfit, islandState: islandState(for: mood))
+                    .frame(width: 34, height: 24).id(mood).transition(.opacity)
             } compactTrailing: {
                 // Правая часть компактного Dynamic Island
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "trailing", outfit: context.state.outfit)
-                    .frame(width: 26, height: 26)
+                if ["🐟", "🧶", "👅", "😻", "💻"].contains(mood) {
+                    Text(mood).font(.caption).id(mood).transition(.opacity)
+                } else {
+                    CatPicture(scene: CatSnapshot.scene(mood: mood), islandSide: "trailing", outfit: context.state.outfit, islandState: islandState(for: mood))
+                        .frame(width: 24, height: 22)
+                }
             } minimal: {
                 // Минимальный вид (когда активно несколько приложений)
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
+                CatPicture(scene: CatSnapshot.scene(mood: mood), islandSide: "leading", outfit: context.state.outfit, islandState: islandState(for: mood))
                     .frame(width: 24, height: 24)
             }
             .widgetURL(URL(string: "aicat://chat"))

@@ -1,4 +1,5 @@
 import XCTest
+import SceneKit
 @testable import AiCat
 
 final class AiCatTests: XCTestCase {
@@ -30,6 +31,53 @@ final class AiCatTests: XCTestCase {
         XCTAssertTrue(later.sleeping)
         XCTAssertEqual(later.action, "sleep")
         XCTAssertGreaterThan(later.energy, cat.energy)
+    }
+
+    func testFrequentSavesDoNotChangeNeedsOrDelaySnack() throws {
+        var cat = CatSnapshot()
+        cat.date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 12)))
+        cat.satiety = 42
+        let quarter = cat.date.addingTimeInterval(900)
+        let fed = cat.projected(at: quarter)
+        XCTAssertEqual(fed.action, "eat")
+        XCTAssertEqual(fed.satiety, 69)
+        XCTAssertNotEqual(fed.projected(at: quarter.addingTimeInterval(301)).action, "eat")
+
+        var reopened = cat
+        for minute in 1...600 {
+            reopened = reopened.projected(at: cat.date.addingTimeInterval(Double(minute) * 60))
+        }
+        let uninterrupted = cat.projected(at: reopened.date)
+        XCTAssertEqual(reopened.satiety, uninterrupted.satiety)
+        XCTAssertEqual(reopened.happiness, uninterrupted.happiness)
+        XCTAssertEqual(reopened.energy, uninterrupted.energy)
+        XCTAssertEqual(reopened.action, uninterrupted.action)
+    }
+
+    func testCatSleepsOvernightThenWakesAfterOwnerIsAway() throws {
+        var cat = CatSnapshot()
+        cat.date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 22)))
+        let night = cat.projected(at: cat.date.addingTimeInterval(3 * 3600))
+        XCTAssertTrue(night.sleeping)
+        XCTAssertEqual(night.action, "sleep")
+        let morning = night.projected(at: cat.date.addingTimeInterval(10 * 3600))
+        XCTAssertFalse(morning.sleeping)
+        XCTAssertNotEqual(morning.action, "sleep")
+    }
+
+    @MainActor
+    func testRigWalkAndReducedMotionSleepPose() {
+        let cat = SCNNode(), torso = SCNNode(), head = SCNNode(), tail = SCNNode()
+        cat.addChildNode(torso)
+        torso.addChildNode(head)
+        torso.addChildNode(tail)
+        let rig = CatMotionRig(cat: cat, torso: torso, head: head, tail: tail, fur: SCNMaterial())
+        rig.set(.walk, reduced: false)
+        rig.advance(by: 0.5)
+        XCTAssertGreaterThan(torso.eulerAngles.x, 0.45)
+        rig.set(.sleep, reduced: true)
+        XCTAssertGreaterThan(torso.eulerAngles.z, 0.2)
+        XCTAssertLessThan(torso.position.y, 0.3)
     }
 
     func testAutonomousCatKeepsExplicitActionAndBounds() {
@@ -137,9 +185,11 @@ final class AiCatTests: XCTestCase {
     }
 
     // 3. Тест полнотекстового поиска BM25 с нормализацией и стеммингом
-    func testBM25Search() {
-        let rag = RAGTool.shared
-        rag.clearAll()
+    func testBM25Search() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let rag = RAGTool(directory: directory)
         
         rag.addDocument(name: "doc1.txt", content: "Коты любят свежую рыбу и спать на солнышке.")
         rag.addDocument(name: "doc2.txt", content: "Язык программирования Swift создан компанией Apple для iOS.")
@@ -155,20 +205,23 @@ final class AiCatTests: XCTestCase {
     }
     
     // 4. Тест тамагочи: сытость и счастье
-    @MainActor
     func testTamagotchiLogic() {
-        let tamagotchi = TamagotchiManager.shared
-        let initialSatiety = tamagotchi.satiety
-        
-        _ = tamagotchi.feedFish()
-        XCTAssertGreaterThanOrEqual(tamagotchi.satiety, initialSatiety, "Кормление должно увеличивать сытость")
-        
-        let initialHappiness = tamagotchi.happiness
-        _ = tamagotchi.petCat()
-        XCTAssertGreaterThanOrEqual(tamagotchi.happiness, initialHappiness, "Поглаживание должно увеличивать счастье")
-        
-        let prompt = tamagotchi.moodContextPrompt()
-        XCTAssertTrue(prompt.contains("ТАМАГОЧИ"), "Промпт должен включать статус тамагочи")
+        var cat = CatSnapshot()
+        cat.satiety = 35
+        cat.happiness = 40
+        cat.energy = 60
+        cat.sleeping = true
+        XCTAssertNil(cat.apply(.play))
+        XCTAssertNotNil(cat.apply(.pet))
+        XCTAssertTrue(cat.sleeping)
+        XCTAssertEqual(cat.happiness, 60)
+        XCTAssertNotNil(cat.apply(.feed))
+        XCTAssertEqual(cat.satiety, 65)
+        XCTAssertFalse(cat.sleeping)
+        XCTAssertNotNil(cat.apply(.play))
+        XCTAssertEqual(cat.action, "play")
+        XCTAssertEqual(cat.energy, 52)
+        XCTAssertEqual(cat.satiety, 62)
     }
     
     // 5. Тест распознавания даты и фильтрации

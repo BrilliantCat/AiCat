@@ -96,6 +96,7 @@ targets:
         buildPhase: resources
       - path: AiCat/Sources/App/CatSnapshot.swift
       - path: AiCat/Sources/App/AiCatAttributes.swift
+      - path: AiCat/Sources/Intents/CareForCatIntent.swift
     entitlements:
       path: AiCatWidget/AiCatWidget.entitlements
       properties:
@@ -118,6 +119,7 @@ targets:
         PRODUCT_NAME: AiCatWidget
         SKIP_INSTALL: "YES"
         APPLICATION_EXTENSION_API_ONLY: "YES"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) AICAT_WIDGET"
         CODE_SIGNING_ALLOWED: "NO"
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGN_IDENTITY: ""

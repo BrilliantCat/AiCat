@@ -9,6 +9,7 @@ public struct BenchmarkResult: Equatable {
     public let memoryUsageMB: Double
 }
 
+@MainActor
 public final class ModelManager: ObservableObject {
     public static let shared = ModelManager()
     
@@ -34,7 +35,7 @@ public final class ModelManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleMemoryWarning()
+            Task { @MainActor in self?.handleMemoryWarning() }
         }
     }
     
@@ -65,25 +66,21 @@ public final class ModelManager: ObservableObject {
         for url in candidateURLs {
             if fm.fileExists(atPath: url.path) {
                 if let meta = GGUFReader.inspect(fileURL: url) {
-                    DispatchQueue.main.async {
-                        self.activeModelURL = url
-                        self.activeModelName = "\(meta.architecture) (GGUF \(meta.quantization))"
-                        self.isModelLoaded = true
-                        self.ggufMetadata = meta
-                        self.modelPathInfo = "Файл: \(url.lastPathComponent) (\(String(format: "%.2f", meta.fileSizeGB)) ГБ). Файл найден. Загрузка при первом запросе."
-                    }
+                    activeModelURL = url
+                    activeModelName = "\(meta.architecture) (GGUF \(meta.quantization))"
+                    isModelLoaded = true
+                    ggufMetadata = meta
+                    modelPathInfo = "Файл: \(url.lastPathComponent) (\(String(format: "%.2f", meta.fileSizeGB)) ГБ). Файл найден. Загрузка при первом запросе."
                     return
                 }
             }
         }
         
-        DispatchQueue.main.async {
-            self.activeModelURL = nil
-            self.isModelLoaded = false
-            self.activeModelName = "Модель не найдена в папке"
-            self.modelPathInfo = "Положи qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models через приложение 'Файлы'"
-            self.ggufMetadata = nil
-        }
+        activeModelURL = nil
+        isModelLoaded = false
+        activeModelName = "Модель не найдена в папке"
+        modelPathInfo = "Положи qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models через приложение 'Файлы'"
+        ggufMetadata = nil
     }
     
     public func findAndLoadDiffusionModel() {
@@ -112,20 +109,16 @@ public final class ModelManager: ObservableObject {
                ["TextEncoder.mlmodelc", "VAEDecoder.mlmodelc", "vocab.json", "merges.txt"].allSatisfy({ fm.fileExists(atPath: dir.appendingPathComponent($0).path) }),
                (fm.fileExists(atPath: dir.appendingPathComponent("Unet.mlmodelc").path) ||
                 ["UnetChunk1.mlmodelc", "UnetChunk2.mlmodelc"].allSatisfy({ fm.fileExists(atPath: dir.appendingPathComponent($0).path) })) {
-                DispatchQueue.main.async {
-                    self.diffusionURL = dir
-                    self.isDiffusionLoaded = true
-                    self.diffusionPathInfo = "CoreML Stable Diffusion найдена в \(dir.lastPathComponent)!"
-                }
+                diffusionURL = dir
+                isDiffusionLoaded = true
+                diffusionPathInfo = "CoreML Stable Diffusion найдена в \(dir.lastPathComponent)!"
                 return
             }
         }
         
-        DispatchQueue.main.async {
-            self.diffusionURL = nil
-            self.isDiffusionLoaded = false
-            self.diffusionPathInfo = "Папка coreml-stable-diffusion-v1-5_split_einsum_compiled не найдена."
-        }
+        diffusionURL = nil
+        isDiffusionLoaded = false
+        diffusionPathInfo = "Папка coreml-stable-diffusion-v1-5_split_einsum_compiled не найдена."
     }
     
     // Инференс через локальный движок

@@ -17,6 +17,7 @@ struct MediaStudioView: View {
     @State private var end = "10"
     @State private var status = ""
     @State private var busy = false
+    @State private var scanning = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -34,8 +35,10 @@ struct MediaStudioView: View {
                     }
                     if let picture {
                         Image(uiImage: picture).resizable().scaledToFit().frame(maxHeight: 260)
-                        Button("Что на фото?") { run { await describe(picture) } }
-                        Button("Прочитать текст") { run { status = await PhotoTool.shared.recognizeTextAsync(from: picture) } }
+                        Button("Что на фото?") { run(scanning: true) { await describe(picture) } }
+                        Button("Прочитать текст") {
+                            run(scanning: true) { status = await PhotoTool.shared.recognizeTextAsync(from: picture) }
+                        }
                         Button("Улучшить") {
                             run { self.picture = await Task.detached { PhotoTool.shared.autoEnhance(image: picture) }.value }
                         }
@@ -100,6 +103,7 @@ struct MediaStudioView: View {
                         }
                     }
                 }
+                if scanning { Cat3DSceneView(motion: .scan).frame(height: 190).accessibilityLabel("AiCat сканирует изображение") }
                 if busy { ProgressView("Кот работает…") }
                 if !status.isEmpty { Text(status).textSelection(.enabled) }
                 if let output { ShareLink("Сохранить или отправить файл", item: output) }
@@ -129,12 +133,19 @@ struct MediaStudioView: View {
         }
     }
 
-    private func run(_ operation: @escaping @MainActor () async -> Void) {
+    private func run(scanning: Bool = false, _ operation: @escaping @MainActor () async -> Void) {
         guard !busy else { return }
         busy = true
+        self.scanning = scanning
         status = ""
         output = nil
-        Task { await operation(); busy = false }
+        Task {
+            defer {
+                busy = false
+                self.scanning = false
+            }
+            await operation()
+        }
     }
 
     private func describe(_ image: UIImage) async {

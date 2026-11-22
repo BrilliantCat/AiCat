@@ -27,11 +27,13 @@ public final class LLMEngine: ObservableObject {
         }
 
         // 1. Извлекаем контекст из локальной базы знаний (RAG BM25)
-        let ragContext = String(RAGTool.shared.searchKnowledge(query: trimmed, topK: 2).prefix(1600))
+        let ragContext = await MainActor.run {
+            String(RAGTool.shared.searchKnowledge(query: trimmed, topK: 2).prefix(1600))
+        }
         
         // 2. Проверяем наличие установленной GGUF модели
         let isModelLoaded = await MainActor.run { 
-            DebugLogger.shared.log("Входящий запрос: \"\(trimmed)\"", level: .info, tag: "Agent")
+            DebugLogger.shared.log("Обработка сообщения", level: .info, tag: "Agent")
             return ModelManager.shared.isModelLoaded 
         }
         
@@ -58,7 +60,7 @@ public final class LLMEngine: ObservableObject {
         let rawModelOutput = await ModelManager.shared.infer(prompt: userPrompt, system: fullSystem, history: history)
 
         // Парсинг JSON-вызова инструмента
-        if let toolCall = parseToolCall(from: rawModelOutput) {
+        if includeTools, let toolCall = parseToolCall(from: rawModelOutput) {
             let toolRes = await ToolRegistry.shared.executeTool(name: toolCall.tool, parameters: toolCall.parameters ?? [:])
             await MainActor.run { self.lastToolExecuted = toolCall.tool }
             

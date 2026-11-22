@@ -11,6 +11,11 @@ public final class LiveActivityManager: ObservableObject {
     @Published public private(set) var islandStatus = "Остров ещё не запущен"
     
     private init() {}
+    private var pendingUpdate: Task<Void, Never>?
+
+    func finishPendingUpdate() async {
+        await pendingUpdate?.value
+    }
     
     // Запуск или переподключение к Live Activity
     public func startOrUpdateActivity(status: String = "AiCat на посту",
@@ -19,7 +24,7 @@ public final class LiveActivityManager: ObservableObject {
                                      isHanging: Bool = false,
                                      recordAction: Bool = true) {
         if recordAction {
-            var snapshot = CatSnapshot.load()
+            var snapshot = CatSnapshot.load().projected(at: Date())
             snapshot.action = CatSnapshot.scene(mood: mood)
             snapshot.actionUntil = Date().addingTimeInterval(mood == "💤" ? 3600 : 120)
             snapshot.save()
@@ -39,6 +44,10 @@ public final class LiveActivityManager: ObservableObject {
         )
         
         contentState.outfit = CatSnapshot.load().outfit
+        let now = Date()
+        let nextTick = Date(timeIntervalSince1970: (floor(now.timeIntervalSince1970 / 900) + 1) * 900)
+        let until = CatSnapshot.load().actionUntil
+        let content = ActivityContent(state: contentState, staleDate: until > now ? until : nextTick)
 
         // Если активность уже запущена — плавно обновляем её
         let active = Activity<AiCatAttributes>.activities.first {
@@ -46,8 +55,10 @@ public final class LiveActivityManager: ObservableObject {
         }
         if let activity = active {
             islandStatus = "Кот в острове"
-            Task {
-                await activity.update(.init(state: contentState, staleDate: nil))
+            let previous = pendingUpdate
+            pendingUpdate = Task {
+                await previous?.value
+                await activity.update(content)
             }
             return
         }
@@ -60,7 +71,7 @@ public final class LiveActivityManager: ObservableObject {
         do {
             _ = try Activity<AiCatAttributes>.request(
                 attributes: attributes,
-                content: .init(state: contentState, staleDate: nil),
+                content: content,
                 pushType: nil
             )
             islandStatus = "Кот в острове"

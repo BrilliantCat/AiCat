@@ -105,8 +105,22 @@ jobs:
 
       - name: Package Payload to IPA
         run: |
+          set -euo pipefail
           mkdir -p build/Payload
           cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
+          app="build/Payload/AiCat.app"
+          widget="$app/PlugIns/AiCatWidget.appex"
+          test -f "$widget/AiCat-Visuals/widget/sleep.png"
+          test -f "$widget/AiCat-Visuals/dynamic-island/peek-leading.png"
+          # Carry the requested App Group in both executables for SideStore to re-sign.
+          for framework in "$app"/Frameworks/*.framework "$app"/Frameworks/*.dylib; do
+            if [ -e "$framework" ]; then codesign --force --sign - --timestamp=none "$framework"; fi
+          done
+          codesign --force --sign - --timestamp=none --entitlements AiCatWidget/AiCatWidget.entitlements "$widget"
+          codesign --force --sign - --timestamp=none --entitlements AiCat/AiCat.entitlements "$app"
+          for bundle in "$widget" "$app"; do
+            codesign -d --entitlements - --xml "$bundle" | python3 -c 'import plistlib, sys; assert "group.com.brilliantcat.aicat" in plistlib.load(sys.stdin.buffer)["com.apple.security.application-groups"]'
+          done
           cd build
           test -f Payload/AiCat.app/Frameworks/llama.framework/llama
           zip -r AiCat.ipa Payload/

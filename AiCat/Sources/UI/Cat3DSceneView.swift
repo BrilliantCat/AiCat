@@ -3,10 +3,22 @@ import SceneKit
 
 public struct Cat3DSceneView: UIViewRepresentable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var speech = CatSpeechSynthesizer.shared
     @ObservedObject var actionHandler = CatActionHandler.shared
+    var requestedMotion: CatMotion?
+    var inRoom = false
+    var isRoaming = false
+    var isVisible = true
     
     public init() {}
+
+    init(motion: CatMotion?, inRoom: Bool = false, isRoaming: Bool = false, isVisible: Bool = true) {
+        requestedMotion = motion
+        self.inRoom = inRoom
+        self.isRoaming = isRoaming
+        self.isVisible = isVisible
+    }
     
     public func makeUIView(context: Context) -> SCNView {
         let scnView = SCNView()
@@ -28,8 +40,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
         keyLight.light?.type = .directional
         keyLight.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.94, alpha: 1.0)
         keyLight.light?.intensity = 850
+        keyLight.light?.castsShadow = inRoom
+        keyLight.light?.shadowColor = UIColor(white: 0.12, alpha: 0.32)
+        keyLight.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+        keyLight.light?.shadowRadius = 3
+        keyLight.light?.orthographicScale = 3.4
         keyLight.position = SCNVector3(x: 2.2, y: 4.5, z: 4.2)
-        keyLight.eulerAngles = SCNVector3(-0.5, 0.45, 0)
+        keyLight.look(at: SCNVector3(0, 0.55, 0))
         rootNode.addChildNode(keyLight)
         
         let cyanRim = SCNNode()
@@ -57,32 +74,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
         // Камера
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
-        cameraNode.position = SCNVector3(x: 0, y: 1.05, z: 4.0)
-        cameraNode.camera?.fieldOfView = 38
+        cameraNode.position = inRoom ? SCNVector3(0, 1.88, 4.25) : SCNVector3(0, 1.05, 4)
+        cameraNode.camera?.fieldOfView = inRoom ? 46 : 38
         cameraNode.look(at: SCNVector3(0, 1.0, 0))
         scnView.pointOfView = cameraNode
         rootNode.addChildNode(cameraNode)
         
-        // 2. КИБЕР-ПЬЕДЕСТАЛ С ВРАЩАЮЩИМИСЯ НЕОНОВЫМИ КОЛЬЦАМИ
-        let pedestalRoot = SCNNode()
-        let discGeo = SCNCylinder(radius: 1.1, height: 0.04)
-        discGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.08, green: 0.09, blue: 0.13, alpha: 1.0)
-        discGeo.firstMaterial?.metalness.contents = 0
-        discGeo.firstMaterial?.roughness.contents = 1
-        let discNode = SCNNode(geometry: discGeo)
-        discNode.position = SCNVector3(0, -0.02, 0)
-        pedestalRoot.addChildNode(discNode)
-        
-        let ringGeo = SCNTorus(ringRadius: 0.95, pipeRadius: 0.022)
-        ringGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
-        ringGeo.firstMaterial?.emission.contents = UIColor.systemCyan
-        let ringNode = SCNNode(geometry: ringGeo)
-        ringNode.position = SCNVector3(0, 0.015, 0)
-        let ringRotate = SCNAction.rotateBy(x: 0, y: CGFloat(Double.pi * 2), z: 0, duration: 9.0)
-        ringNode.runAction(SCNAction.repeatForever(ringRotate))
-        pedestalRoot.addChildNode(ringNode)
-        ringNode.isHidden = true
-        rootNode.addChildNode(pedestalRoot)
+        if inRoom { CatRoomScenery.install(in: scene) }
         
         // 3. ПЕРСОНАЖ: СТИЛЬНЫЙ КОТ AICAT
         let catRoot = SCNNode()
@@ -92,11 +90,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
         // Отдельный узел для дыхания (чтобы сальто и трюки не конфликтовали с дыханием!)
         let breatheNode = SCNNode()
         breatheNode.name = "BreatheNode"
-        let breatheAction = SCNAction.sequence([
-            scaleAction(to: SCNVector3(1.025, 1.03, 1.025), duration: 1.6),
-            scaleAction(from: SCNVector3(1.025, 1.03, 1.025), to: SCNVector3(1.0, 1.0, 1.0), duration: 1.6)
-        ])
-        breatheNode.runAction(SCNAction.repeatForever(breatheAction), forKey: "breathe_idle")
         catRoot.addChildNode(breatheNode)
         
         // Материалы кота
@@ -114,8 +107,9 @@ public struct Cat3DSceneView: UIViewRepresentable {
         pinkMaterial.diffuse.contents = UIColor(red: 0.75, green: 0.43, blue: 0.48, alpha: 1.0)
         
         let eyeMaterial = SCNMaterial()
-        eyeMaterial.diffuse.contents = UIColor(red: 0.1, green: 0.95, blue: 0.5, alpha: 1.0) // Изумрудный свет
-        eyeMaterial.emission.contents = UIColor(red: 0.05, green: 0.4, blue: 0.18, alpha: 1.0)
+        eyeMaterial.diffuse.contents = UIColor(red: 0.42, green: 0.78, blue: 0.20, alpha: 1.0) // Изумрудный свет
+        eyeMaterial.specular.contents = UIColor(white: 0.8, alpha: 1)
+        eyeMaterial.shininess = 0.8
         
         // --- ГОЛОВА ---
         let headGeo = SCNSphere(radius: 0.52)
@@ -123,7 +117,21 @@ public struct Cat3DSceneView: UIViewRepresentable {
         let headNode = SCNNode(geometry: headGeo)
         headNode.name = "Head"
         headNode.position = SCNVector3(0, 1.25, 0)
+        headNode.simdScale = [1.04, 0.94, 1]
         breatheNode.addChildNode(headNode)
+        let stripe = SCNMaterial()
+        stripe.diffuse.contents = UIColor(red: 0.23, green: 0.25, blue: 0.28, alpha: 1)
+        // Short silver-tabby bars follow the curvature of the forehead.
+        for index in -1...1 {
+            let mark = SCNNode(geometry: SCNSphere(radius: 1))
+            mark.geometry?.firstMaterial = stripe
+            mark.simdScale = [0.024, 0.088, 0.012]
+            let x = Float(index) * 0.095
+            let y: Float = 0.29
+            mark.simdPosition = [x, y, sqrt(0.52 * 0.52 - x * x - y * y)]
+            mark.simdEulerAngles = [-0.60, x * 2, -x]
+            headNode.addChildNode(mark)
+        }
         
         // Щечки
         let cheekGeo = SCNSphere(radius: 0.105)
@@ -176,7 +184,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
             glint.position = SCNVector3(-0.035, 0.045, 0.14)
             eye.addChildNode(glint)
         }
-        headNode.runAction(idleLookAction(), forKey: "idle_look")
 
         let mouth = SCNNode(geometry: SCNSphere(radius: 0.036))
         mouth.name = "Mouth"
@@ -208,25 +215,25 @@ public struct Cat3DSceneView: UIViewRepresentable {
         leftEar.name = "LeftEar"
         leftEar.position = SCNVector3(-0.32, 0.49, 0.05)
         leftEar.eulerAngles = SCNVector3(0, 0, 0.28)
+        leftEar.simdScale.z = 0.62
         headNode.addChildNode(leftEar)
         
         let rightEar = SCNNode(geometry: earGeo)
         rightEar.name = "RightEar"
         rightEar.position = SCNVector3(0.32, 0.49, 0.05)
         rightEar.eulerAngles = SCNVector3(0, 0, -0.28)
+        rightEar.simdScale.z = 0.62
         headNode.addChildNode(rightEar)
         
         let innerEarGeo = SCNCone(topRadius: 0.01, bottomRadius: 0.11, height: 0.26)
         innerEarGeo.firstMaterial = pinkMaterial
         let leftInner = SCNNode(geometry: innerEarGeo)
-        leftInner.position = SCNVector3(-0.30, 0.47, 0.12)
-        leftInner.eulerAngles = SCNVector3(-0.12, 0, 0.28)
-        headNode.addChildNode(leftInner)
+        leftInner.position = SCNVector3(0, -0.01, 0.085)
+        leftEar.addChildNode(leftInner)
         
         let rightInner = SCNNode(geometry: innerEarGeo)
-        rightInner.position = SCNVector3(0.30, 0.47, 0.12)
-        rightInner.eulerAngles = SCNVector3(-0.12, 0, -0.28)
-        headNode.addChildNode(rightInner)
+        rightInner.position = leftInner.position
+        rightEar.addChildNode(rightInner)
         
         let earTwitch = SCNAction.sequence([
             SCNAction.wait(duration: 4.5),
@@ -342,57 +349,38 @@ public struct Cat3DSceneView: UIViewRepresentable {
         breatheNode.addChildNode(outfitPendant)
         
         // ЛАПКИ
-        let pawGeo = SCNCapsule(capRadius: 0.10, height: 0.38)
-        pawGeo.firstMaterial = furWhiteMaterial
-        let leftPaw = SCNNode(geometry: pawGeo)
-        leftPaw.name = "LeftPaw"
-        leftPaw.position = SCNVector3(-0.22, 0.22, 0.28)
-        breatheNode.addChildNode(leftPaw)
-        
-        let rightPaw = SCNNode(geometry: pawGeo)
-        rightPaw.name = "RightPaw"
-        rightPaw.position = SCNVector3(0.22, 0.22, 0.28)
-        breatheNode.addChildNode(rightPaw)
-        
-        let hindGeo = SCNSphere(radius: 0.24)
-        hindGeo.firstMaterial = furMaterial
-        let leftHind = SCNNode(geometry: hindGeo)
-        leftHind.position = SCNVector3(-0.36, 0.24, -0.05)
-        leftHind.scale = SCNVector3(0.8, 0.9, 1.2)
-        breatheNode.addChildNode(leftHind)
-        
-        let rightHind = SCNNode(geometry: hindGeo)
-        rightHind.position = SCNVector3(0.36, 0.24, -0.05)
-        rightHind.scale = SCNVector3(0.8, 0.9, 1.2)
-        breatheNode.addChildNode(rightHind)
-        
-        // ХВОСТ
         let tailRoot = SCNNode()
         tailRoot.name = "TailRoot"
         tailRoot.position = SCNVector3(0, 0.28, -0.42)
         
-        let tailBaseGeo = SCNCylinder(radius: 0.075, height: 0.42)
-        tailBaseGeo.firstMaterial = furMaterial
-        let tailBase = SCNNode(geometry: tailBaseGeo)
-        tailBase.position = SCNVector3(0, 0.18, 0)
-        tailBase.eulerAngles = SCNVector3(-0.55, 0, 0)
-        tailRoot.addChildNode(tailBase)
-        
-        let tailTipGeo = SCNSphere(radius: 0.09)
-        tailTipGeo.firstMaterial = furWhiteMaterial
-        let tailTip = SCNNode(geometry: tailTipGeo)
-        tailTip.position = SCNVector3(0, 0.42, -0.15)
-        tailRoot.addChildNode(tailTip)
+        let curve: [SIMD3<Float>] = [[0,0,0], [0.19,-0.10,-0.17], [0.42,-0.13,-0.22],
+                                     [0.57,-0.03,-0.16], [0.64,0.16,-0.09], [0.61,0.30,0]]
+        for i in 1..<curve.count {
+            let delta = curve[i] - curve[i - 1]
+            let radius = 0.087 - Float(i) * 0.005
+            let segment = SCNNode(geometry: SCNCapsule(capRadius: CGFloat(radius),
+                                                     height: CGFloat(simd_length(delta) + 2 * radius)))
+            segment.geometry?.firstMaterial = i == curve.count - 1 ? stripe : furMaterial
+            segment.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(delta))
+            segment.simdPosition = (curve[i] + curve[i - 1]) * 0.5
+            tailRoot.addChildNode(segment)
+        }
         breatheNode.addChildNode(tailRoot)
         
-        let tailWag = SCNAction.sequence([
-            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.2),
-            SCNAction.rotateBy(x: 0, y: -0.70, z: -0.30, duration: 1.4),
-            SCNAction.rotateBy(x: 0, y: 0.35, z: 0.15, duration: 1.2)
-        ])
-        tailRoot.runAction(SCNAction.repeatForever(tailWag))
-        
-        rootNode.addChildNode(catRoot)
+        let traveller = SCNNode()
+        traveller.addChildNode(catRoot)
+        rootNode.addChildNode(traveller)
+        context.coordinator.traveller = traveller
+        if inRoom {
+            let toy = SCNNode(geometry: SCNSphere(radius: 0.072))
+            toy.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
+            toy.isHidden = true
+            rootNode.addChildNode(toy)
+            context.coordinator.toy = toy
+        }
+        context.coordinator.rig = CatMotionRig(cat: catRoot, torso: breatheNode, head: headNode,
+                                               tail: tailRoot, fur: furMaterial)
+        context.coordinator.startClock()
         
         // ЖЕСТЫ: Поглаживание (Pan) и Тап (Tap)
         let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
@@ -407,15 +395,29 @@ public struct Cat3DSceneView: UIViewRepresentable {
     public func updateUIView(_ uiView: SCNView, context: Context) {
         guard let cat = uiView.scene?.rootNode.childNode(withName: "AiCatRoot", recursively: true) else { return }
         
-        cat.speed = reduceMotion ? 0 : 1
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        let animate = isVisible && scenePhase == .active && !reduceMotion
+        uiView.isPlaying = animate
+        uiView.rendersContinuously = animate
+        coordinator.clock?.isPaused = !animate
+        cat.isPaused = !animate
         let mood = actionHandler.state.moodEmoji
-        if context.coordinator.lastMood != mood {
-            context.coordinator.lastMood = mood
+        let action = actionHandler.state.currentAction
+        let motion: CatMotion = requestedMotion ?? (action == .wash || mood == "👅" ? .groom :
+            action == .sleep || mood == "💤" ? .sleep :
+            mood == "😻" ? .purr :
+            mood == "🐟" ? .eat : mood == "💻" ? .computer :
+            action == .play || mood == "🧶" ? .play : speech.isSpeaking ? .talk : .idle)
+        let asleep = motion == .sleep
+        if coordinator.wasAsleep != asleep || coordinator.reduced != reduceMotion {
+            context.coordinator.wasAsleep = asleep
+            coordinator.reduced = reduceMotion
             for name in ["LeftEye", "RightEye"] {
                 guard let eye = cat.childNode(withName: name, recursively: true) else { continue }
                 eye.removeAction(forKey: "blink")
-                eye.scale = SCNVector3(1, mood == "💤" ? 0.08 : 1, 1)
-                if mood != "💤" {
+                eye.scale = SCNVector3(1, asleep ? 0.08 : 1, 1)
+                if !asleep && !reduceMotion {
                     let blink = SCNAction.sequence([
                         .wait(duration: mood == "😻" ? 1.5 : 3.5),
                         scaleAction(to: SCNVector3(1, 0.1, 1), duration: 0.08),
@@ -426,12 +428,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
             }
         }
         if let mouth = cat.childNode(withName: "Mouth", recursively: true) {
-            if speech.isSpeaking && mouth.action(forKey: "talk") == nil {
+            let movesMouth = !reduceMotion && !asleep && (speech.isSpeaking || motion == .eat || motion == .groom)
+            if movesMouth && mouth.action(forKey: "talk") == nil {
                 mouth.runAction(.repeatForever(.sequence([
                     scaleAction(from: SCNVector3(0.7, 0.18, 0.3), to: SCNVector3(0.7, 0.8, 0.3), duration: 0.14),
                     scaleAction(from: SCNVector3(0.7, 0.8, 0.3), to: SCNVector3(0.7, 0.18, 0.3), duration: 0.16)
                 ])), forKey: "talk")
-            } else if !speech.isSpeaking {
+            } else if !movesMouth {
                 mouth.removeAction(forKey: "talk")
                 mouth.scale = SCNVector3(0.7, 0.18, 0.3)
             }
@@ -442,10 +445,21 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         // 2. Выполняем конечно-автоматную анимацию под уникальным токеном
         let token = actionHandler.state.executionToken
-        if context.coordinator.lastExecutedToken == token { return }
-        context.coordinator.lastExecutedToken = token
-        
-        executeCatAction(cat: cat, action: actionHandler.state.currentAction)
+        if context.coordinator.lastExecutedToken != token {
+            context.coordinator.lastExecutedToken = token
+            cat.removeAction(forKey: "cat_action")
+            cat.simdPosition = .zero
+            cat.simdEulerAngles = .zero
+            cat.simdScale = [1, 1, 1]
+            if requestedMotion == nil && !reduceMotion && (action == .somersault || action == .hangOnIsland || action == .dressUp) {
+                executeCatAction(cat: cat, action: action)
+            }
+        }
+        coordinator.baseMotion = motion
+        if !animate {
+            coordinator.rig?.set(motion, reduced: true)
+            uiView.setNeedsDisplay()
+        }
     }
     
     // Переключение реальных 3D элементов одежды
@@ -468,7 +482,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             return
         }
         
-        glasses?.isHidden = !outfit.contains("очки") && !outfit.contains("худи") && !outfit.contains("кепка") && !outfit.contains("кулон")
+        glasses?.isHidden = !outfit.contains("очки")
         hoodie?.isHidden = !outfit.contains("худи")
         cap?.isHidden = !outfit.contains("кепка")
         pendant?.isHidden = !outfit.contains("кулон")
@@ -487,9 +501,14 @@ public struct Cat3DSceneView: UIViewRepresentable {
             context.fill(CGRect(origin: .zero, size: size))
             let cg = context.cgContext
             cg.setLineWidth(0.6)
+            var seed: UInt32 = 107
+            func coordinate() -> CGFloat {
+                seed = seed &* 1664525 &+ 1013904223
+                return CGFloat(seed >> 16) / 128
+            }
             for index in 0..<6000 {
-                let x = CGFloat((index * 71) % 512)
-                let y = CGFloat((index * 137) % 512)
+                let x = coordinate()
+                let y = coordinate()
                 let light = CGFloat(index % 7) / 30 + 0.3
                 cg.setStrokeColor(UIColor(white: light, alpha: 0.5).cgColor)
                 cg.move(to: CGPoint(x: x, y: y))
@@ -499,18 +518,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
         }
     }()
 
-    private func idleLookAction() -> SCNAction {
-        .repeatForever(.sequence([
-            .wait(duration: 3.2),
-            .rotateTo(x: 0.03, y: 0.16, z: -0.04, duration: 0.7),
-            .wait(duration: 1.5),
-            .rotateTo(x: -0.02, y: -0.13, z: 0.03, duration: 0.9),
-            .wait(duration: 2),
-            .rotateTo(x: 0, y: 0, z: 0, duration: 0.7)
-        ]))
-    }
-
-    // SceneKit's built-in scale action only supports a uniform scalar.
     private func scaleAction(from start: SCNVector3 = SCNVector3(1, 1, 1),
                              to end: SCNVector3, duration: TimeInterval) -> SCNAction {
         SCNAction.customAction(duration: duration) { node, elapsed in
@@ -527,24 +534,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
     private func executeCatAction(cat: SCNNode, action: CatActionType) {
         // Останавливаем предыдущую анимацию под ключом
         cat.removeAction(forKey: "cat_action")
-        
-        let head = cat.childNode(withName: "Head", recursively: true)
-        let leftPaw = cat.childNode(withName: "LeftPaw", recursively: true)
-        
-        head?.removeAction(forKey: "head_action")
-        head?.removeAction(forKey: "idle_look")
-        if action != .wash && action != .sleep && actionHandler.state.moodEmoji != "😻" {
-            head?.runAction(idleLookAction(), forKey: "idle_look")
-        }
-        leftPaw?.removeAction(forKey: "paw_action")
-        
-        // Сброс в абсолютное базовое положение (без накопления погрешностей!)
-        cat.position = SCNVector3(0, 0, 0)
-        cat.eulerAngles = SCNVector3(0, 0, 0)
-        cat.scale = SCNVector3(1, 1, 1)
-        leftPaw?.position = SCNVector3(-0.22, 0.22, 0.28)
-        leftPaw?.eulerAngles = SCNVector3(0, 0, 0)
-        head?.eulerAngles = SCNVector3(0, 0, 0)
         
         switch action {
         case .somersault:
@@ -572,31 +561,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let fullSomersault = SCNAction.sequence([crouch, jumpGroup, fallDown, bounceLand])
             cat.runAction(fullSomersault, forKey: "cat_action")
             
-        case .wash:
-            if let paw = leftPaw, let h = head {
-                let tiltHead = SCNAction.sequence([
-                    SCNAction.rotateTo(x: 0.1, y: 0, z: 0.15, duration: 0.2),
-                    SCNAction.wait(duration: 1.2),
-                    SCNAction.rotateTo(x: 0, y: 0, z: 0, duration: 0.25)
-                ])
-                h.runAction(tiltHead, forKey: "head_action")
-                
-                let lift = SCNAction.move(to: SCNVector3(-0.16, 1.15, 0.45), duration: 0.25)
-                lift.timingMode = .easeOut
-                let scrub1 = SCNAction.rotateBy(x: 0.4, y: 0, z: 0.35, duration: 0.18)
-                let scrub2 = SCNAction.rotateBy(x: -0.4, y: 0, z: -0.35, duration: 0.18)
-                let drop = SCNAction.move(to: SCNVector3(-0.22, 0.22, 0.28), duration: 0.25)
-                drop.timingMode = .easeIn
-                
-                let cycle = SCNAction.sequence([
-                    lift,
-                    scrub1, scrub2, scrub1, scrub2, scrub1, scrub2,
-                    drop,
-                    SCNAction.run { node in node.eulerAngles = SCNVector3(0, 0, 0) }
-                ])
-                paw.runAction(cycle, forKey: "paw_action")
-            }
-            
         case .hangOnIsland:
             // Кот прыгает наверх прямо под Dynamic Island и раскачивается как маятник
             let jumpToIsland = SCNAction.move(to: SCNVector3(0, 1.3, 0.35), duration: 0.38)
@@ -611,31 +575,12 @@ public struct Cat3DSceneView: UIViewRepresentable {
             
             cat.runAction(SCNAction.sequence([jumpToIsland, swing, landDown]), forKey: "cat_action")
             
-        case .play:
-            let hop1 = SCNAction.move(to: SCNVector3(-0.15, 0.3, 0.1), duration: 0.2)
-            let hop2 = SCNAction.move(to: SCNVector3(0.15, 0.3, 0.1), duration: 0.2)
-            let returnFloor = SCNAction.move(to: SCNVector3(0, 0, 0), duration: 0.2)
-            cat.runAction(SCNAction.sequence([hop1, hop2, returnFloor]), forKey: "cat_action")
-            
-        case .sleep:
-            let curlDown = SCNAction.group([
-                scaleAction(to: SCNVector3(1.05, 0.85, 1.05), duration: 0.4),
-                SCNAction.move(to: SCNVector3(0, -0.1, 0), duration: 0.4)
-            ])
-            cat.runAction(curlDown, forKey: "cat_action")
-            
         case .dressUp:
             // Модный поворот на 360 градусов при примерке одежды
             let twirl = SCNAction.rotateBy(x: 0, y: CGFloat(Double.pi * 2), z: 0, duration: 0.7)
             cat.runAction(twirl, forKey: "cat_action")
             
-        default:
-            if actionHandler.state.moodEmoji == "😻" {
-                head?.runAction(.sequence([
-                    .rotateTo(x: 0.08, y: 0.10, z: 0.12, duration: 0.25),
-                    .rotateTo(x: 0, y: 0, z: 0, duration: 0.4)
-                ]), forKey: "head_action")
-            }
+        default: break
         }
     }
 
@@ -643,6 +588,8 @@ public struct Cat3DSceneView: UIViewRepresentable {
         view.isPlaying = false
         view.rendersContinuously = false
         view.scene = nil
+        coordinator.clock?.invalidate()
+        coordinator.rig = nil
     }
     
     public func makeCoordinator() -> Coordinator {
@@ -652,15 +599,123 @@ public struct Cat3DSceneView: UIViewRepresentable {
     @MainActor
     public class Coordinator: NSObject {
         var parent: Cat3DSceneView
-        var lastMood = ""
+        var wasAsleep: Bool?
+        var reduced = false
+        var rig: CatMotionRig?
+        weak var traveller: SCNNode?
+        weak var toy: SCNNode?
+        var clock: CADisplayLink?
+        var baseMotion: CatMotion = .idle {
+            didSet {
+                if baseMotion != oldValue {
+                    destination = nil
+                    toy?.isHidden = true
+                    rest = 2.5
+                }
+            }
+        }
+        private var destination: SIMD2<Float>?
+        private var rest: Float = 2.5
+        private var previousFrame: CFTimeInterval?
+        private var holdingCat = false
         var lastExecutedToken: String = ""
         private var lastHapticTime: TimeInterval = 0
         private var lastPetTime: TimeInterval = 0
         
         init(_ parent: Cat3DSceneView) { self.parent = parent }
+
+        func startClock() {
+            let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
+            link.preferredFramesPerSecond = 30
+            link.add(to: .main, forMode: .common)
+            clock = link
+        }
+
+        @objc private func frame(_ link: CADisplayLink) {
+            let dt = Float(min(0.08, max(0, link.timestamp - (previousFrame ?? link.timestamp))))
+            previousFrame = link.timestamp
+            guard let rig, let traveller else { return }
+            var motion = baseMotion
+            if parent.inRoom && parent.requestedMotion == nil && baseMotion != .sleep && !holdingCat {
+                rest -= dt
+                if destination == nil && rest <= 0 && parent.isRoaming &&
+                    [.idle, .groom, .play, .computer].contains(baseMotion) {
+                    let x: Float = traveller.simdPosition.x > 0 ? -0.64 : 0.64
+                    destination = [x, Float.random(in: -0.44...0.16)]
+                }
+                if let target = destination {
+                    let position = SIMD2<Float>(traveller.simdPosition.x, traveller.simdPosition.z)
+                    let offset = target - position
+                    let distance = simd_length(offset)
+                    if distance < 0.025 {
+                        destination = nil
+                        toy?.isHidden = true
+                        rest = Float.random(in: 7...16)
+                    } else {
+                        motion = .walk
+                        let direction = offset / distance
+                        let heading = atan2(direction.x, direction.y)
+                        turn(traveller, to: heading, step: dt)
+                        let alignment = max(0, cos(heading - traveller.eulerAngles.y))
+                        let next = position + direction * min(distance, dt * 0.58 * alignment)
+                        traveller.simdPosition = [next.x, 0, next.y]
+                    }
+                }
+            }
+            if motion != .walk { turn(traveller, to: 0, step: dt) }
+            rig.set(motion, reduced: false)
+            rig.advance(by: dt)
+        }
+
+        private func turn(_ node: SCNNode, to angle: Float, step: Float) {
+            let delta = angle - node.eulerAngles.y
+            node.eulerAngles.y += atan2(sin(delta), cos(delta)) * min(1, step * 6)
+        }
+
+        private func hitsCat(_ point: CGPoint, in view: SCNView) -> Bool {
+            var node = view.hitTest(point, options: nil).first?.node
+            while let hit = node {
+                if hit.name == "AiCatRoot" { return true }
+                node = hit.parent
+            }
+            return false
+        }
+
+        private func moveToy(to point: CGPoint, in view: SCNView) {
+            guard !parent.reduceMotion, parent.requestedMotion == nil, baseMotion != .sleep else { return }
+            let near = view.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 0))
+            let far = view.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 1))
+            let dy = far.y - near.y
+            guard dy < -0.001 else { return }
+            let t = -near.y / dy
+            guard (0...1).contains(t) else { return }
+            let x = min(0.70, max(-0.70, near.x + (far.x - near.x) * t))
+            let z = min(0.22, max(-0.50, near.z + (far.z - near.z) * t))
+            destination = [x, z]
+            toy?.simdPosition = [x, 0.075, z]
+            toy?.isHidden = false
+        }
         
         // ПОГЛАЖИВАНИЕ СВАЙПОМ: плавное мурчание и тактильный отклик
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard parent.inRoom, let view = gesture.view as? SCNView else { return }
+            let point = gesture.location(in: view)
+            if gesture.state == .began {
+                // UIKit recognises a pan after movement. Hit-test the initial contact.
+                let translation = gesture.translation(in: view)
+                holdingCat = hitsCat(CGPoint(x: point.x - translation.x, y: point.y - translation.y), in: view)
+            }
+            guard holdingCat else {
+                if gesture.state == .began || gesture.state == .changed { moveToy(to: point, in: view) }
+                return
+            }
+            rig?.gaze = [Float(point.x / max(view.bounds.width, 1) * 2 - 1),
+                         Float(point.y / max(view.bounds.height, 1) * 2 - 1)]
+            if gesture.state == .cancelled || gesture.state == .failed {
+                holdingCat = false
+                rig?.gaze = .zero
+                return
+            }
             let now = Date().timeIntervalSince1970
             if now - lastHapticTime > 0.12 {
                 lastHapticTime = now
@@ -668,19 +723,27 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 softHaptic.impactOccurred(intensity: 0.7)
             }
             
-            if gesture.state == .ended && now - lastPetTime > 1 {
-                lastPetTime = now
-                _ = TamagotchiManager.shared.petCat()
+            if gesture.state == .ended {
+                holdingCat = false
+                rig?.gaze = .zero
+                if now - lastPetTime > 1 {
+                    lastPetTime = now
+                    _ = TamagotchiManager.shared.petCat()
+                }
             }
         }
         
         // ТАП: быстрое почесывание за ушком
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard parent.inRoom, let view = gesture.view as? SCNView else { return }
+            let point = gesture.location(in: view)
+            if !hitsCat(point, in: view) {
+                moveToy(to: point, in: view)
+                return
+            }
             let now = Date().timeIntervalSince1970
             guard now - lastPetTime > 1 else { return }
             lastPetTime = now
-            let gen = UIImpactFeedbackGenerator(style: .medium)
-            gen.impactOccurred()
             _ = TamagotchiManager.shared.petCat()
         }
     }

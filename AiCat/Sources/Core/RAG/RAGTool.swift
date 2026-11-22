@@ -37,10 +37,13 @@ public final class RAGTool: ObservableObject {
     private let k1: Double = 1.2
     private let b: Double = 0.75
     
-    private init() {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        self.chunksStorageURL = docs.appendingPathComponent("aicat_rag_chunks.json")
-        self.metaStorageURL = docs.appendingPathComponent("aicat_rag_meta.json")
+    private convenience init() {
+        self.init(directory: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0])
+    }
+
+    init(directory: URL) {
+        self.chunksStorageURL = directory.appendingPathComponent("aicat_rag_chunks.json")
+        self.metaStorageURL = directory.appendingPathComponent("aicat_rag_meta.json")
         loadData()
     }
     
@@ -122,7 +125,7 @@ public final class RAGTool: ObservableObject {
             return (true, "PDF «\(name)» успешно проиндексирован!")
         } else {
             // Текстовый файл или Markdown
-            guard let text = try? String(contentsOf: url, encoding: .utf8) ?? String(contentsOf: url, encoding: .windowsCP1251) else {
+            guard let text = (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, encoding: .windowsCP1251)) else {
                 return (false, "Не удалось прочитать текст файла.")
             }
             addDocument(name: name, content: text)
@@ -141,8 +144,10 @@ public final class RAGTool: ObservableObject {
     public func clearAll() {
         indexedDocuments.removeAll()
         documentsMeta.removeAll()
-        try? FileManager.default.removeItem(at: chunksStorageURL)
-        try? FileManager.default.removeItem(at: metaStorageURL)
+        storageQueue.sync {
+            try? FileManager.default.removeItem(at: chunksStorageURL)
+            try? FileManager.default.removeItem(at: metaStorageURL)
+        }
     }
     
     // Полноценный поиск BM25

@@ -13,52 +13,111 @@ struct CatSnapshot: Codable {
     var actionUntil = Date.distantPast
 
     static let group = "group.com.brilliantcat.aicat"
-    static var defaults: UserDefaults {
-        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil else {
-            return .standard
+    static let sharedDefaults: UserDefaults? = {
+        // Re-signing may append the team ID to the original App Group.
+        // Accept only groups for this app which this process can actually open.
+        var groups = [group]
+        if let profile = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+           let data = try? Data(contentsOf: profile),
+           let start = data.range(of: Data("<?xml".utf8)),
+           let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+           let plist = try? PropertyListSerialization.propertyList(from: data.subdata(in: start.lowerBound..<end.upperBound),
+                                                                 options: [], format: nil) as? [String: Any],
+           let entitlements = plist["Entitlements"] as? [String: Any],
+           let signedGroups = entitlements["com.apple.security.application-groups"] as? [String] {
+            groups += signedGroups.filter { $0.hasPrefix(group + ".") && !$0.contains("*") }
         }
-        return UserDefaults(suiteName: group) ?? .standard
+        for candidate in groups where FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate) != nil {
+            if let suite = UserDefaults(suiteName: candidate) { return suite }
+        }
+        return nil
+    }()
+    static var defaults: UserDefaults { sharedDefaults ?? .standard }
+
+    private static let activities = ["idle", "groom", "play", "computer", "idle"]
+    private static func activity(at slot: Int) -> String {
+        let count = activities.count
+        return activities[(slot % count + count) % count]
     }
 
     static func load() -> CatSnapshot {
         guard let data = defaults.data(forKey: "catSnapshot"),
-              let state = try? JSONDecoder().decode(CatSnapshot.self, from: data) else { return CatSnapshot() }
+              let state = try? JSONDecoder().decode(CatSnapshot.self, from: data) else {
+            var first = CatSnapshot()
+            first.sleeping = !(7..<23).contains(Calendar.current.component(.hour, from: first.date))
+            first.action = first.sleeping ? "sleep" : "idle"
+            return first
+        }
         return state
     }
 
     func save() {
-        if let data = try? JSONEncoder().encode(self) { Self.defaults.set(data, forKey: "catSnapshot") }
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        Self.defaults.set(data, forKey: "catSnapshot")
+        if Self.sharedDefaults != nil { UserDefaults.standard.set(data, forKey: "catSnapshot") }
+    }
+
+    /// Apply to the snapshot already projected to the interaction time.
+    mutating func apply(_ care: CatCare) -> String? {
+        let reply: String
+        switch care {
+        case .feed:
+            sleeping = false
+            satiety = min(100, satiety + 30)
+            happiness = min(100, happiness + 15)
+            action = "eat"
+            reply = "О, рыбка! Сяду рядом и съем по кусочку."
+        case .pet:
+            happiness = min(100, happiness + 20)
+            if sleeping {
+                action = "sleep"
+                return "Тихонько мурчит во сне."
+            }
+            action = "purr"
+            reply = "Мурр. Вот тут, за ухом."
+        case .play:
+            guard !sleeping, energy >= 20 else { return nil }
+            happiness = min(100, happiness + 15)
+            satiety = max(10, satiety - 3)
+            energy = max(10, energy - 8)
+            action = "play"
+            reply = "Поймал! Кати ещё, кожаный."
+        }
+        actionUntil = date.addingTimeInterval(120)
+        return reply
     }
 
     func projected(at now: Date) -> CatSnapshot {
         var state = self
-        // Simulate bounded intervals so a closed app follows the same daily rhythm.
-        var cursor = max(date, now.addingTimeInterval(-7 * 86400))
-        var food = Double(satiety)
-        var joy = Double(happiness)
-        var stamina = Double(energy)
-        var asleep = sleeping
-        while cursor < now {
-            let next = min(now, cursor.addingTimeInterval(900))
-            let hours = next.timeIntervalSince(cursor) / 3600
-            let hour = Calendar.current.component(.hour, from: cursor)
+        // Anchor ticks to the clock. Saving after a stroke must not round away a
+        // fraction of a point, or restart the countdown until the next meal.
+        let slot = Int(floor(now.timeIntervalSince1970 / 900))
+        var tick = max(Int(floor(date.timeIntervalSince1970 / 900)), slot - 7 * 96)
+        while tick < slot {
+            tick += 1
+            let instant = Date(timeIntervalSince1970: Double(tick) * 900)
+            let hour = Calendar.current.component(.hour, from: instant)
             let night = hour < 7 || hour >= 23
-            if stamina < 25 || (night && cursor >= actionUntil) { asleep = true }
-            if asleep && stamina >= 95 && !night { asleep = false }
-            food = max(10, food - hours * (asleep ? 2 : 4))
-            joy = max(15, joy - hours * (asleep ? 1 : 2))
-            stamina = min(100, max(10, stamina + hours * (asleep ? 15 : -4)))
-            cursor = next
+            if instant >= state.actionUntil {
+                if night || state.energy < 25 { state.sleeping = true }
+                else if state.energy >= 95 { state.sleeping = false }
+            }
+            func points(perHour rate: Int) -> Int { tick * rate / 4 - (tick - 1) * rate / 4 }
+            state.satiety = max(10, state.satiety - points(perHour: state.sleeping ? 2 : 4))
+            state.happiness = max(15, state.happiness - points(perHour: state.sleeping ? 1 : 2))
+            let energyChange = state.sleeping ? points(perHour: 15) : -points(perHour: 4)
+            state.energy = min(100, max(10, state.energy + energyChange))
+            if !state.sleeping && state.satiety <= 42 && instant >= state.actionUntil {
+                state.satiety += 28
+                state.action = "eat"
+                state.actionUntil = instant.addingTimeInterval(300)
+            } else if !state.sleeping && instant >= state.actionUntil &&
+                        state.happiness < 65 && Self.activity(at: tick) == "play" {
+                state.happiness += 4
+            }
         }
-        state.satiety = Int(food)
-        state.happiness = Int(joy)
-        state.energy = Int(stamina)
-        state.sleeping = asleep
-        if now >= actionUntil {
-            let scenes = ["idle", "groom", "play", "computer", "idle"]
-            let slot = Int(now.timeIntervalSince1970 / 900)
-            let index = ((slot % scenes.count) + scenes.count) % scenes.count
-            state.action = asleep ? "sleep" : (state.satiety < 35 ? "idle" : scenes[index])
+        if now >= state.actionUntil {
+            state.action = state.sleeping ? "sleep" : Self.activity(at: slot)
         }
         state.date = now
         return state
@@ -68,7 +127,8 @@ struct CatSnapshot: Codable {
         switch mood {
         case "🐟": return "eat"
         case "💤": return "sleep"
-        case "👅", "😻": return "groom"
+        case "👅": return "groom"
+        case "😻": return "purr"
         case "🧶", "🤸‍♂️", "💪", "🐆": return "play"
         case "🤔", "💻", "🧠": return "computer"
         default: return "idle"
@@ -77,27 +137,55 @@ struct CatSnapshot: Codable {
 
     var mood: String {
         ["idle": "😼", "sleep": "💤", "groom": "👅", "play": "🧶",
-         "computer": "💻", "eat": "🐟"][action] ?? "😼"
+         "computer": "💻", "eat": "🐟", "purr": "😻"][action] ?? "😼"
     }
 
     var label: String {
         if satiety < 35 && action != "sleep" { return "Ждёт рыбку" }
         if happiness < 35 && action == "idle" { return "Ждёт ласки" }
         return ["idle": "Наблюдает", "sleep": "Спит", "groom": "Умывается", "play": "Играет",
-         "computer": "За компьютером", "eat": "Перекусывает"][action] ?? "Наблюдает"
+         "computer": "За компьютером", "eat": "Перекусывает", "purr": "Мурчит"][action] ?? "Наблюдает"
     }
+
+    var roomArtwork: String { action == "purr" ? "idle" : action }
 }
 
 struct CatPicture: View {
     let scene: String
     var islandSide: String? = nil
     var outfit: String? = nil
+    var islandState: String? = nil
+
+    private var artwork: UIImage? {
+        let location: (name: String, folder: String)
+        if let islandSide {
+            let state = islandState ?? (scene == "sleep" ? "sleep" : "peek")
+            location = ("\(state)-\(islandSide)", "dynamic-island")
+        } else {
+            location = (scene == "purr" ? "idle" : scene, "widget")
+        }
+        return Self.artwork(named: location.name, folder: location.folder)
+    }
+
+    static func artwork(named name: String, folder: String) -> UIImage? {
+        UIImage(named: "AiCat-Visuals/\(folder)/\(name).png", in: .main, compatibleWith: nil)
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
-            CatPortrait(scene: scene, outfit: outfit)
-                .frame(width: side, height: side)
+            Group {
+                if let artwork {
+                    Image(uiImage: artwork)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: islandSide == nil ? side * 0.16 : 0))
+                } else {
+                    CatPortrait(scene: scene, outfit: outfit)
+                }
+            }
+                .frame(width: islandSide == nil ? side : geometry.size.width,
+                       height: islandSide == nil ? side : geometry.size.height)
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
         .accessibilityLabel("Кот AiCat. \(scene == "sleep" ? "Спит" : "Бодрствует")")

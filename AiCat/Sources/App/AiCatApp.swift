@@ -16,33 +16,23 @@ struct AiCatApp: App {
         WindowGroup {
             MainView()
                 .preferredColorScheme(.dark)
-                .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        TamagotchiManager.shared.loadStateAndApplyDecay()
-                        let cat = CatSnapshot.load().projected(at: Date())
-                        LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood, action: cat.label, recordAction: false)
-                        checkBackTapLaunch()
-                    }
-                }
-                .onChange(of: scenePhase) { _, newPhase in
+                .onChange(of: scenePhase, initial: true) { _, newPhase in
                     if newPhase != .active {
                         YogaCoachTool.shared.pause()
                         CatFitnessCoach.shared.pause()
                     }
                     if newPhase == .active {
-                        TamagotchiManager.shared.loadStateAndApplyDecay()
-                        let cat = CatSnapshot.load().projected(at: Date())
-                        LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood, action: cat.label, recordAction: false)
+                        TamagotchiManager.shared.didBecomeActive()
                         checkBackTapLaunch()
+                    } else if newPhase == .background {
+                        speechRecognizer.stopListening()
+                        UserDefaults.standard.set(Date(), forKey: "aicat.lastDeparture")
                     }
                 }
                 .onReceive(lifeTimer) { _ in
                     if scenePhase == .active && !YogaCoachTool.shared.isSessionActive && !CatFitnessCoach.shared.isWorkoutActive {
                         TamagotchiManager.shared.refreshAutonomousLife()
                     }
-                }
-                .onOpenURL { url in
-                    if url.scheme == "aicat" { TamagotchiManager.shared.loadStateAndApplyDecay() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WakeAiCatTriggered"))) { _ in
                     UserDefaults.standard.set(false, forKey: "startListeningOnLaunch")

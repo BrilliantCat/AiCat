@@ -3,7 +3,6 @@ import SwiftUI
 public struct MainView: View {
     @StateObject private var catHandler = CatActionHandler.shared
     @StateObject private var tamagotchi = TamagotchiManager.shared
-    @StateObject private var modelManager = ModelManager.shared
     @StateObject private var certificateWatchdog = CertificateWatchdog.shared
     @StateObject private var fitnessCoach = CatFitnessCoach.shared
     @StateObject private var yogaCoach = YogaCoachTool.shared
@@ -22,6 +21,7 @@ public struct MainView: View {
     @StateObject private var liveActivity = LiveActivityManager.shared
     @State private var showClearChat = false
     @State private var lastPet = Date.distantPast
+    @State private var inRoom = true
     
     @FocusState private var isInputFocused: Bool
     
@@ -62,33 +62,42 @@ public struct MainView: View {
                     speechErrorBanner(err)
                 }
                 
-                // 6. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая весь экран под чат)
-                if !isInputFocused {
-                    VStack(spacing: 6) {
-                        Cat3DSceneView()
-                            .frame(height: 210)
-                            .frame(maxWidth: .infinity)
-                            .clipped()
-                        statusBadges
-                    }
-                    .padding(.bottom, 8)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
-                    .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.12)))
-                    .padding(.horizontal, 12)
-
-                    // 7. Панель быстрых трюков (скрывается при клавиатуре)
+                if inRoom {
+                    Cat3DSceneView(motion: catMotion, inRoom: true, isRoaming: tamagotchi.isRoaming,
+                                   isVisible: !showWardrobe && !showMediaStudio && !showModelManager &&
+                                       !showDebugLog && !showRAGManager && !showPhoneControl)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .padding(.horizontal, 8)
+                        .accessibilityLabel("Комната кота")
+                        .accessibilityAction(named: "Погладить") { petCompanion() }
+                    statusBadges.padding(.top, 8)
                     actionChipsBar
+                } else {
+                    messagesScrollView
+                    if waitingForReply { ProgressView("Кот думает…").tint(.cyan) }
+                    inputBar
                 }
-                
-                // 8. Лента сообщений чата (занимает всё доступное пространство)
-                messagesScrollView
-                
-                // 9. Поле ввода и микрофон
-                if waitingForReply { ProgressView("Кот думает…").tint(.cyan) }
-                inputBar
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: fitnessCoach.isWorkoutActive) { _, active in if active { inRoom = true } }
+        .onChange(of: yogaCoach.isSessionActive) { _, active in if active { inRoom = true } }
+        .onOpenURL { url in
+            guard url.scheme == "aicat", let host = url.host, ["chat", "room"].contains(host) else { return }
+            isInputFocused = false
+            showWardrobe = false
+            showModelManager = false
+            showRAGManager = false
+            showDebugLog = false
+            showMediaStudio = false
+            showPhoneControl = false
+            inRoom = host == "room"
+            if inRoom, let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "care" })?.value, let care = CatCare(rawValue: value) {
+                _ = tamagotchi.care(care)
+            }
+        }
         .tint(.mint)
         .confirmationDialog("Очистить переписку?", isPresented: $showClearChat, titleVisibility: .visible) {
             Button("Очистить", role: .destructive) {
@@ -123,10 +132,26 @@ public struct MainView: View {
             self.chatMessages = ChatStorage.shared.loadMessages()
         }
         .onChange(of: speechRecognizer.transcribedText) { _, newText in
-            if speechRecognizer.isRecording && !newText.isEmpty {
+            if !newText.isEmpty {
                 self.inputText = newText
             }
         }
+    }
+
+    private var catMotion: CatMotion? {
+        if fitnessCoach.isWorkoutActive && !fitnessCoach.isPaused {
+            return fitnessCoach.currentExerciseName.localizedCaseInsensitiveContains("присед") ? .squat : .pushUp
+        }
+        if yogaCoach.isSessionActive && !yogaCoach.isPaused {
+            let index = yogaCoach.currentExerciseIndex
+            if yogaCoach.routine.indices.contains(index) {
+                let name = yogaCoach.routine[index].name
+                return name.localizedCaseInsensitiveContains("планк") ? .plank : .yoga
+            }
+        }
+        if waitingForReply { return .think }
+        if speechSynthesizer.isSpeaking { return .talk }
+        return nil
     }
     
     // MARK: - Header
@@ -140,6 +165,13 @@ public struct MainView: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }.layoutPriority(1)
             Spacer(minLength: 4)
+            Button {
+                isInputFocused = false
+                inRoom.toggle()
+            } label: {
+                Image(systemName: inRoom ? "bubble.left.and.bubble.right" : "pawprint.fill")
+                    .frame(width: 44, height: 44)
+            }.accessibilityLabel(inRoom ? "Открыть чат" : "Открыть комнату")
             Button { speechSynthesizer.isVoiceEnabled.toggle() } label: {
                 Image(systemName: speechSynthesizer.isVoiceEnabled ? "speaker.wave.2" : "speaker.slash")
                     .frame(width: 44, height: 44)
@@ -341,13 +373,16 @@ public struct MainView: View {
 
     private var actionChipsBar: some View {
         HStack(spacing: 10) {
-            Button { addCatResponse(tamagotchi.feedFish()) } label: { Label("Кормить", systemImage: "fish") }
-            Button { addCatResponse(tamagotchi.play()) } label: { Label("Играть", systemImage: "gamecontroller") }
+            Button { _ = tamagotchi.feedFish() } label: { Label("Кормить", systemImage: "fish") }
+            Button { _ = tamagotchi.play() } label: { Label("Играть", systemImage: "gamecontroller") }
             Menu {
                 Button("Погладить", systemImage: "hand.draw") { petCompanion() }
-                Button("Умыться") { addCatResponse(catHandler.execute(action: "wash")) }
-                Button("Спать") { addCatResponse(tamagotchi.sleep()) }
-                Button("Проснуться") { addCatResponse(tamagotchi.wake()) }
+                Button("Умыться") { _ = catHandler.execute(action: "wash") }.disabled(tamagotchi.isSleeping)
+                if tamagotchi.isSleeping {
+                    Button("Проснуться") { _ = tamagotchi.wake() }
+                } else {
+                    Button("Спать") { _ = tamagotchi.sleep() }
+                }
                 Divider()
                 Button("Йога") { addCatResponse(yogaCoach.startWorkout()) }
                 Button("Дыхание") { addCatResponse(yogaCoach.startWorkout(type: "breathing")) }
@@ -430,6 +465,7 @@ public struct MainView: View {
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
+            .disabled(waitingForReply)
             
             if !inputText.isEmpty {
                 Button(action: {
@@ -459,7 +495,7 @@ public struct MainView: View {
     private func sendUserQuery(_ text: String) {
         guard !waitingForReply else { return }
         waitingForReply = true
-        LiveActivityManager.shared.update(status: "Думает над ответом", mood: "🤔", action: "Думает")
+        LiveActivityManager.shared.startOrUpdateActivity(status: "Думает над ответом", mood: "🤔", action: "Думает", recordAction: false)
         let userMsg = ChatMessage(sender: .user, text: text)
         chatMessages.append(userMsg)
         ChatStorage.shared.saveMessages(chatMessages)
@@ -468,7 +504,9 @@ public struct MainView: View {
             let (reply, image) = await LLMEngine.shared.generate(prompt: text)
             await MainActor.run {
                 self.waitingForReply = false
-                LiveActivityManager.shared.update(status: "Ответ готов", mood: "😼", action: "На связи")
+                if !yogaCoach.isSessionActive && !fitnessCoach.isWorkoutActive {
+                    tamagotchi.refreshAutonomousLife()
+                }
                 self.addCatResponse(reply, image: image)
             }
         }

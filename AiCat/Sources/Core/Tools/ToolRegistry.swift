@@ -159,13 +159,12 @@ public final class ToolRegistry {
         case "create_note":
             let title = parameters["title"] ?? "Заметка от AiCat"
             let content = parameters["content"] ?? ""
-            let res = NotesTool.shared.saveNote(title: title, content: content)
+            let res = await MainActor.run { NotesTool.shared.saveNote(title: title, content: content) }
             return (true, res, nil)
             
         case "search_notes":
             let q = parameters["query"] ?? ""
-            let list = NotesTool.shared.notes
-            let filtered = list.filter { $0.title.localizedCaseInsensitiveContains(q) || $0.content.localizedCaseInsensitiveContains(q) }
+            let filtered = await MainActor.run { NotesTool.shared.searchNotes(query: q) }
             if filtered.isEmpty {
                 return (true, "Заметок по запросу «\(q)» не нашлось.", nil)
             }
@@ -174,7 +173,7 @@ public final class ToolRegistry {
             
         case "search_knowledge_base":
             let q = parameters["query"] ?? ""
-            let found = RAGTool.shared.searchKnowledge(query: q)
+            let found = await MainActor.run { RAGTool.shared.searchKnowledge(query: q) }
             let res = found.isEmpty ? "В твоих проиндексированных документах ничего подходящего не нашлось." : "Вот что я нашел в твоих файлах:\n" + found
             return (true, res, nil)
             
