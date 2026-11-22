@@ -112,6 +112,30 @@ final class AiCatTests: XCTestCase {
         XCTAssertTrue(chatML.contains("<|im_start|>assistant\n"))
     }
     
+    func testSnapshotUpgradeWithoutOutfit() throws {
+        let data = try JSONEncoder().encode(CatSnapshot())
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "outfit")
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(CatSnapshot.self, from: legacy)
+        XCTAssertNil(decoded.outfit)
+        XCTAssertEqual(decoded.satiety, 85)
+    }
+
+    func testConversationPromptAndHistoryRoles() {
+        let prompt = PromptBuilder.buildSystemPrompt(includeTools: false)
+        XCTAssertTrue(prompt.contains("AiCat"))
+        XCTAssertFalse(prompt.contains("create_reminder"))
+        let chat = PromptBuilder.formatChatML(system: prompt, messages: [
+            (role: "user", content: "У меня кот Барсик"),
+            (role: "assistant", content: "Как он поживает?"),
+            (role: "user", content: "Помнишь его имя?")
+        ])
+        XCTAssertTrue(chat.contains("<|im_start|>assistant\nКак он поживает?<|im_end|>"))
+        XCTAssertTrue(chat.contains("<|im_start|>user\nПомнишь его имя?<|im_end|>"))
+        XCTAssertTrue(chat.hasSuffix("<|im_start|>assistant\n"))
+    }
+
     // 3. Тест полнотекстового поиска BM25 с нормализацией и стеммингом
     func testBM25Search() {
         let rag = RAGTool.shared

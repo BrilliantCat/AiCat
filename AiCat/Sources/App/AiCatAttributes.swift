@@ -4,6 +4,7 @@ import Foundation
 public struct AiCatAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         public var statusMessage: String
+        public var outfit: String? = nil
         public var moodEmoji: String
         public var currentAction: String
         public var isHanging: Bool

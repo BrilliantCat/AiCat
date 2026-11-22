@@ -19,7 +19,9 @@ public struct MainView: View {
     @State private var showMediaStudio = false
     @State private var showPhoneControl = false
     @State private var waitingForReply = false
-    @AppStorage("catUses3D") private var catUses3D = false
+    @StateObject private var liveActivity = LiveActivityManager.shared
+    @State private var showClearChat = false
+    @State private var lastPet = Date.distantPast
     
     @FocusState private var isInputFocused: Bool
     
@@ -30,7 +32,11 @@ public struct MainView: View {
     public var body: some View {
         ZStack {
             // Фон: глубокий темный Apple Dark
-            Color(red: 0.07, green: 0.08, blue: 0.11).ignoresSafeArea()
+            LinearGradient(colors: [Color(red: 0.06, green: 0.10, blue: 0.16),
+                                    Color(red: 0.13, green: 0.10, blue: 0.20),
+                                    Color(red: 0.04, green: 0.07, blue: 0.12)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+            Circle().fill(Color.teal.opacity(0.16)).frame(width: 280).blur(radius: 70).offset(x: -130, y: -250)
             
             VStack(spacing: 0) {
                 // 1. Верхняя панель управления
@@ -58,23 +64,18 @@ public struct MainView: View {
                 
                 // 6. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая весь экран под чат)
                 if !isInputFocused {
-                    ZStack(alignment: .bottom) {
-                        Group {
-                            if catUses3D { Cat3DSceneView() }
-                            else {
-                                TimelineView(.periodic(from: .now, by: 30)) { context in
-                                    let snapshot = CatSnapshot.load().projected(at: context.date)
-                                    AnimatedCatView(scene: snapshot.action)
-                                        .onTapGesture { addCatResponse(tamagotchi.petCat()) }
-                                }
-                            }
-                        }
-                        .frame(height: 220)
-                        .transition(.opacity.combined(with: .scale))
-                        
+                    VStack(spacing: 6) {
+                        Cat3DSceneView()
+                            .frame(height: 210)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
                         statusBadges
                     }
-                    
+                    .padding(.bottom, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+                    .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.12)))
+                    .padding(.horizontal, 12)
+
                     // 7. Панель быстрых трюков (скрывается при клавиатуре)
                     actionChipsBar
                 }
@@ -85,6 +86,14 @@ public struct MainView: View {
                 // 9. Поле ввода и микрофон
                 if waitingForReply { ProgressView("Кот думает…").tint(.cyan) }
                 inputBar
+            }
+        }
+        .preferredColorScheme(.dark)
+        .tint(.mint)
+        .confirmationDialog("Очистить переписку?", isPresented: $showClearChat, titleVisibility: .visible) {
+            Button("Очистить", role: .destructive) {
+                ChatStorage.shared.clear()
+                chatMessages = ChatStorage.shared.loadMessages()
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isInputFocused)
@@ -123,90 +132,39 @@ public struct MainView: View {
     // MARK: - Header
     
     private var headerView: some View {
-        HStack {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("AiCat")
-                        .font(.title3)
-                        .bold()
-                        .foregroundColor(.white)
-                    Text(catHandler.state.moodEmoji)
-                        .font(.headline)
+                Text("AiCat").font(.system(.title2, design: .rounded, weight: .bold))
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                Text(waitingForReply ? "Слушаю и думаю…" : catHandler.state.statusText)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }.layoutPriority(1)
+            Spacer(minLength: 4)
+            Button { speechSynthesizer.isVoiceEnabled.toggle() } label: {
+                Image(systemName: speechSynthesizer.isVoiceEnabled ? "speaker.wave.2" : "speaker.slash")
+                    .frame(width: 44, height: 44)
+            }.accessibilityLabel("Озвучка ответов")
+            Menu {
+                Button("Гардероб", systemImage: "tshirt") { showWardrobe = true }
+                Button("Фото и аудио", systemImage: "camera") { showMediaStudio = true }
+                Button("Телефон", systemImage: "iphone") { showPhoneControl = true }
+                Button("Документы", systemImage: "doc.text") { showRAGManager = true }
+                Button("Модели", systemImage: "cpu") { showModelManager = true }
+                Button("Диагностика", systemImage: "waveform.path.ecg") { showDebugLog = true }
+                Text(liveActivity.islandStatus)
+                Button("Показать кота в острове", systemImage: "pawprint") {
+                    tamagotchi.refreshAutonomousLife()
                 }
-                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B · файл найден" : "AiCat Офлайн ядро")
-                    .font(.caption2)
-                    .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
-            }
-            
-            Spacer()
-            
-            // Очистка истории переписки
-            Button(action: {
-                ChatStorage.shared.clear()
-                chatMessages = ChatStorage.shared.loadMessages()
-            }) {
-                Image(systemName: "trash")
-                    .foregroundColor(.gray)
-                    .font(.caption)
-                    .padding(7)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(Circle())
-            }
-            
-            // Гардероб
-            Button(action: { catUses3D = true; showWardrobe = true }) {
-                Image(systemName: "tshirt.fill")
-                    .foregroundColor(.cyan)
-                    .padding(7)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-            
-            // Документы и база знаний RAG
-            Button(action: { showRAGManager = true }) {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .foregroundColor(.cyan)
-                    .padding(7)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-            
-            // Меню моделей
-            Button(action: { showModelManager = true }) {
-                Image(systemName: "cpu.fill")
-                    .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
-                    .padding(7)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-            
-            // Терминал отладки (Debug Log)
-            Button(action: { showDebugLog = true }) {
-                Image(systemName: "terminal.fill")
-                    .foregroundColor(.yellow)
-                    .padding(7)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
-            }
-            
-            // Тумблер озвучки голосом
-            HStack(spacing: 6) {
-                Image(systemName: speechSynthesizer.isVoiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                    .foregroundColor(speechSynthesizer.isVoiceEnabled ? .green : .gray)
-                    .font(.caption)
-                Toggle("", isOn: $speechSynthesizer.isVoiceEnabled)
-                    .labelsHidden()
-                    .toggleStyle(SwitchToggleStyle(tint: .cyan))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.08))
-            .cornerRadius(16)
+                Divider()
+                Button("Очистить чат", systemImage: "trash", role: .destructive) { showClearChat = true }
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 44, height: 44)
+            }.accessibilityLabel("Меню AiCat")
         }
-        .padding(.horizontal)
-        .padding(.top, 6)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16).padding(.vertical, 8)
     }
-    
+
     // MARK: - Workout Live HUD
     
     private var workoutLiveBanner: some View {
@@ -369,77 +327,47 @@ public struct MainView: View {
     // MARK: - Badges
     
     private var statusBadges: some View {
-        HStack(spacing: 8) {
-            BadgeView(icon: "fish.fill", text: "\(tamagotchi.satiety)%", color: .cyan)
-            BadgeView(icon: "heart.fill", text: "\(tamagotchi.happiness)%", color: .pink)
-            BadgeView(icon: "bolt.fill", text: "\(tamagotchi.energy)%", color: .yellow)
-            
-            Text(catHandler.state.statusText)
-                .font(.caption2)
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.black.opacity(0.4))
-                .cornerRadius(10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.cyan.opacity(0.4), lineWidth: 1)
-                )
+        HStack(spacing: 12) {
+            Label("\(tamagotchi.satiety)%", systemImage: "fish.fill").foregroundStyle(.mint)
+            Label("\(tamagotchi.happiness)%", systemImage: "heart.fill").foregroundStyle(.pink)
+            Label("\(tamagotchi.energy)%", systemImage: "bolt.fill").foregroundStyle(.yellow)
+            Spacer(minLength: 0)
+            Image(systemName: liveActivity.islandStatus == "Кот в острове" ? "checkmark.circle" : "info.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(liveActivity.islandStatus)
         }
-        .padding(.bottom, 4)
+        .font(.caption2).padding(.horizontal, 16)
     }
-    
+
     private var actionChipsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ActionChip(icon: "pawprint.fill", label: catUses3D ? "Картинки кота" : "3D-кот") { catUses3D.toggle() }
-                ActionChip(icon: "iphone", label: "Телефон") { showPhoneControl = true }
-                ActionChip(icon: "wind", label: "Дыхание") { addCatResponse(yogaCoach.startWorkout(type: "breathing")) }
-                ActionChip(icon: "figure.walk", label: "Разминка") { addCatResponse(yogaCoach.startWorkout(type: "mobility")) }
-                ActionChip(icon: "figure.core.training", label: "Планка") { addCatResponse(yogaCoach.startWorkout(type: "plank")) }
-                ActionChip(icon: "gamecontroller.fill", label: "Играть") { addCatResponse(tamagotchi.play()) }
-                ActionChip(icon: "camera.fill", label: "Фото и аудио") { showMediaStudio = true }
-                ActionChip(icon: "figure.mind.and.body", label: "Йога") {
-                    let reply = yogaCoach.startWorkout()
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "figure.strengthtraining.traditional", label: "Отжимания") {
-                    let reply = CatFitnessCoach.shared.startPushups()
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "figure.run", label: "Приседания") {
-                    let reply = CatFitnessCoach.shared.startSquats()
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "fish.fill", label: "Покормить") {
-                    let reply = tamagotchi.feedFish()
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "figure.roll", label: "Кувырок") {
-                    let reply = catHandler.execute(action: "somersault")
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "sparkles", label: "Помойся") {
-                    let reply = catHandler.execute(action: "wash")
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "pawprint.fill", label: "Повисни") {
-                    let reply = catHandler.execute(action: "hang_on_island")
-                    addCatResponse(reply)
-                }
-                ActionChip(icon: "paintpalette.fill", label: "Нарисуй арт") {
-                    sendUserQuery("Нарисуй неоновый киберпанк город с летающими машинами")
-                }
-                ActionChip(icon: "music.note", label: "Музыка") {
-                    let reply = MusicTool.shared.generateBeat(style: "lo-fi")
-                    addCatResponse(reply)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 6)
+        HStack(spacing: 10) {
+            Button { addCatResponse(tamagotchi.feedFish()) } label: { Label("Кормить", systemImage: "fish") }
+            Button { addCatResponse(tamagotchi.play()) } label: { Label("Играть", systemImage: "gamecontroller") }
+            Menu {
+                Button("Погладить", systemImage: "hand.draw") { petCompanion() }
+                Button("Умыться") { addCatResponse(catHandler.execute(action: "wash")) }
+                Button("Спать") { addCatResponse(tamagotchi.sleep()) }
+                Button("Проснуться") { addCatResponse(tamagotchi.wake()) }
+                Divider()
+                Button("Йога") { addCatResponse(yogaCoach.startWorkout()) }
+                Button("Дыхание") { addCatResponse(yogaCoach.startWorkout(type: "breathing")) }
+                Button("Разминка") { addCatResponse(yogaCoach.startWorkout(type: "mobility")) }
+                Button("Планка") { addCatResponse(yogaCoach.startWorkout(type: "plank")) }
+                Button("Отжимания") { addCatResponse(fitnessCoach.startPushups()) }
+                Button("Приседания") { addCatResponse(fitnessCoach.startSquats()) }
+            } label: { Label("Заняться", systemImage: "sparkles") }
         }
+        .font(.system(.caption, design: .rounded, weight: .medium))
+        .buttonStyle(.bordered).tint(.mint)
+        .frame(maxWidth: .infinity).padding(.vertical, 6)
     }
-    
+
+    private func petCompanion() {
+        guard Date().timeIntervalSince(lastPet) > 2 else { return }
+        lastPet = Date()
+        _ = tamagotchi.petCat()
+    }
+
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -456,6 +384,11 @@ public struct MainView: View {
             .onTapGesture {
                 isInputFocused = false
             }
+            .onChange(of: isInputFocused) { _, focused in
+                if focused, let last = chatMessages.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
             .onChange(of: chatMessages.count) { _, _ in
                 if let last = chatMessages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -469,7 +402,10 @@ public struct MainView: View {
     private var inputBar: some View {
         HStack(spacing: 10) {
             HStack {
-                TextField("Скажи или спроси что-нибудь...", text: $inputText)
+                TextField("Как прошёл твой день?", text: $inputText, axis: .vertical)
+                    .lineLimit(1...4)
+                    .submitLabel(.send)
+                    .onSubmit { submitInput() }
                     .focused($isInputFocused)
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
@@ -483,8 +419,8 @@ public struct MainView: View {
                     .padding(.trailing, 8)
                 }
             }
-            .background(Color.white.opacity(0.08))
-            .cornerRadius(20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.12)))
             
             Button(action: { toggleVoiceRecording() }) {
                 Image(systemName: speechRecognizer.isRecording ? "waveform.circle.fill" : "mic.fill")
@@ -497,23 +433,29 @@ public struct MainView: View {
             
             if !inputText.isEmpty {
                 Button(action: {
-                    let text = inputText
-                    inputText = ""
-                    sendUserQuery(text)
+                    submitInput()
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .foregroundColor(.cyan)
-                }
+                }.disabled(waitingForReply)
             }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(red: 0.08, green: 0.09, blue: 0.12))
+        .background(.ultraThinMaterial)
     }
     
     // MARK: - Logic & AI Chat
     
+    private func submitInput() {
+        guard !waitingForReply else { return }
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        inputText = ""
+        sendUserQuery(text)
+    }
+
     private func sendUserQuery(_ text: String) {
         guard !waitingForReply else { return }
         waitingForReply = true

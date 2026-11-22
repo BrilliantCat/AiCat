@@ -24,8 +24,8 @@ public struct CatActionState: Codable, Equatable {
     
     public static let `default` = CatActionState(
         currentAction: .idle,
-        isDressed: true,
-        currentOutfit: "Черные кибер-очки",
+        isDressed: false,
+        currentOutfit: nil,
         isHanging: false,
         moodEmoji: "😼",
         statusText: "Наблюдаю за тобой",
@@ -37,9 +37,26 @@ public struct CatActionState: Codable, Equatable {
 public final class CatActionHandler: ObservableObject {
     public static let shared = CatActionHandler()
     
-    @Published public var state: CatActionState = .default
-    
-    private init() {}
+    @Published public var state: CatActionState = .default {
+        didSet {
+            UserDefaults.standard.set(state.isDressed, forKey: "aicat.dressed")
+            UserDefaults.standard.set(state.currentOutfit, forKey: "aicat.outfit")
+            if oldValue.isDressed != state.isDressed || oldValue.currentOutfit != state.currentOutfit {
+                var snapshot = CatSnapshot.load()
+                snapshot.outfit = state.isDressed ? state.currentOutfit : nil
+                snapshot.save()
+            }
+        }
+    }
+
+    private init() {
+        if UserDefaults.standard.object(forKey: "aicat.dressed") != nil {
+            var restored = CatActionState.default
+            restored.isDressed = UserDefaults.standard.bool(forKey: "aicat.dressed")
+            restored.currentOutfit = UserDefaults.standard.string(forKey: "aicat.outfit")
+            state = restored
+        }
+    }
     
     public func execute(action: String, item: String? = nil) -> String {
         switch action {

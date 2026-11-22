@@ -45,14 +45,18 @@ public final class LLMEngine: ObservableObject {
     
     // Агентский цикл с реальным парсингом JSON вызова инструментов
     private func runGGUFAgentLoop(userPrompt: String, ragContext: String) async -> (text: String, image: UIImage?) {
-        let systemPrompt = PromptBuilder.buildSystemPrompt(ragContext: ragContext)
+        let actionWords = ["напомни", "создай", "запиши", "открой", "включи", "выключи", "нарисуй",
+                           "сгенерируй", "переведи", "покорми", "погладь", "поигра", "одень", "переодень",
+                           "покажи", "найди", "запусти", "начни", "календар", "напоминани", "статус"]
+        let includeTools = actionWords.contains { userPrompt.lowercased().contains($0) }
+        let systemPrompt = PromptBuilder.buildSystemPrompt(ragContext: ragContext, includeTools: includeTools)
         let moodPrompt = await MainActor.run { TamagotchiManager.shared.moodContextPrompt() }
-        let history = ChatStorage.shared.loadMessages().dropLast().suffix(4).map { "\($0.sender == .user ? "Пользователь" : "Кот"): \($0.text.prefix(500))" }.joined(separator: "\n")
-        let fullSystem = systemPrompt + "\n" + moodPrompt + "\nПредыдущие сообщения для контекста:\n" + history
-        
-        // Запрос к модели Qwen 2.5
-        let rawModelOutput = await ModelManager.shared.infer(prompt: userPrompt, system: fullSystem)
-        
+        let history = ChatStorage.shared.loadMessages().dropLast().suffix(12).map {
+            (role: $0.sender == .user ? "user" : "assistant", content: String($0.text.prefix(1000)))
+        }
+        let fullSystem = systemPrompt + "\n" + moodPrompt
+        let rawModelOutput = await ModelManager.shared.infer(prompt: userPrompt, system: fullSystem, history: history)
+
         // Парсинг JSON-вызова инструмента
         if let toolCall = parseToolCall(from: rawModelOutput) {
             let toolRes = await ToolRegistry.shared.executeTool(name: toolCall.tool, parameters: toolCall.parameters ?? [:])

@@ -66,7 +66,7 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         var clean = text
         // Убираем markdown блоки, кавычки и звездочки для чистого звучания
         clean = clean.replacingOccurrences(of: "```[\\s\\S]*?```", with: "", options: .regularExpression)
-        clean = clean.replacingOccurrences(of: "\\*([^*]+)\\*", with: "$1", options: .regularExpression)
+        clean = clean.replacingOccurrences(of: "\\*([^*]+)\\*", with: "", options: .regularExpression)
         clean = clean.replacingOccurrences(of: "[#_`~]", with: "", options: .regularExpression)
         return clean.trimmingCharacters(in: .whitespacesAndNewlines)
     }

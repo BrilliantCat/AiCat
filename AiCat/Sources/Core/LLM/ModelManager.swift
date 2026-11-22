@@ -129,10 +129,10 @@ public final class ModelManager: ObservableObject {
     }
     
     // Инференс через локальный движок
-    public func infer(prompt: String, system: String) async -> String {
+    public func infer(prompt: String, system: String, history: [(role: String, content: String)] = []) async -> String {
         guard let url = activeModelURL else { return "Файл Qwen не найден. Открой меню моделей." }
         do {
-            return try await LocalInference.shared.reply(url: url, prompt: prompt, system: system)
+            return try await LocalInference.shared.reply(url: url, prompt: prompt, system: system, history: history)
         } catch {
             return "Не удалось выполнить запрос: \(error.localizedDescription)"
         }
@@ -142,7 +142,7 @@ public final class ModelManager: ObservableObject {
         isBenchmarking = true
         Task {
             let start = Date()
-            let output = await infer(prompt: "Привет! Представься одним предложением.", system: "Ты AiCat. Отвечай по-русски.")
+            let output = await infer(prompt: "Привет, кот. День был тяжёлый.", system: PromptBuilder.buildSystemPrompt(includeTools: false))
             let elapsed = Date().timeIntervalSince(start) * 1000
             await MainActor.run {
                 let result = BenchmarkResult(timeToFirstTokenMs: elapsed, tokensPerSecond: 0,

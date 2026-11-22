@@ -2,11 +2,13 @@ import Combine
 import Foundation
 import ActivityKit
 import WidgetKit
+import UIKit
 
+@MainActor
 public final class LiveActivityManager: ObservableObject {
     public static let shared = LiveActivityManager()
     
-    private var currentActivity: Activity<AiCatAttributes>?
+    @Published public private(set) var islandStatus = "Остров ещё не запущен"
     
     private init() {}
     
@@ -17,15 +19,18 @@ public final class LiveActivityManager: ObservableObject {
                                      isHanging: Bool = false,
                                      recordAction: Bool = true) {
         if recordAction {
-        var snapshot = CatSnapshot.load()
-        snapshot.action = CatSnapshot.scene(mood: mood)
-        snapshot.actionUntil = Date().addingTimeInterval(mood == "💤" ? 3600 : 120)
-        snapshot.save()
-        WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
+            var snapshot = CatSnapshot.load()
+            snapshot.action = CatSnapshot.scene(mood: mood)
+            snapshot.actionUntil = Date().addingTimeInterval(mood == "💤" ? 3600 : 120)
+            snapshot.save()
+            WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
         }
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            islandStatus = "Live Activities отключены в настройках iOS"
+            return
+        }
         
-        let contentState = AiCatAttributes.ContentState(
+        var contentState = AiCatAttributes.ContentState(
             statusMessage: status,
             moodEmoji: mood,
             currentAction: action,
@@ -33,27 +38,35 @@ public final class LiveActivityManager: ObservableObject {
             isListening: false
         )
         
+        contentState.outfit = CatSnapshot.load().outfit
+
         // Если активность уже запущена — плавно обновляем её
-        if let activity = currentActivity ?? Activity<AiCatAttributes>.activities.first {
-            self.currentActivity = activity
+        let active = Activity<AiCatAttributes>.activities.first {
+            $0.activityState == .active || $0.activityState == .stale
+        }
+        if let activity = active {
+            islandStatus = "Кот в острове"
             Task {
                 await activity.update(.init(state: contentState, staleDate: nil))
             }
             return
         }
         
-        // Закрываем старые зависшие активности перед стартом новой
-        
+        guard UIApplication.shared.applicationState == .active else {
+            islandStatus = "Открой AiCat, чтобы запустить остров"
+            return
+        }
         let attributes = AiCatAttributes(catName: "AiCat")
         do {
-            let activity = try Activity<AiCatAttributes>.request(
+            _ = try Activity<AiCatAttributes>.request(
                 attributes: attributes,
                 content: .init(state: contentState, staleDate: nil),
                 pushType: nil
             )
-            self.currentActivity = activity
+            islandStatus = "Кот в острове"
         } catch {
-            print("Ошибка запуска Dynamic Island Live Activity: \(error.localizedDescription)")
+            islandStatus = "Не удалось запустить остров: \(error.localizedDescription)"
+            DebugLogger.shared.log(islandStatus, level: .warn, tag: "Island")
         }
     }
     
@@ -70,6 +83,6 @@ public final class LiveActivityManager: ObservableObject {
                 await activity.end(emptyState, dismissalPolicy: .immediate)
             }
         }
-        currentActivity = nil
+        islandStatus = "Остров завершён"
     }
 }

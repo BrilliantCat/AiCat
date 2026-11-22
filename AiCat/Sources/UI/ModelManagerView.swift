@@ -1,6 +1,7 @@
 import SwiftUI
 
 public struct ModelManagerView: View {
+    @ObservedObject private var liveActivity = LiveActivityManager.shared
     @ObservedObject var modelManager = ModelManager.shared
     @Environment(\.presentationMode) var presentationMode
     
@@ -15,7 +16,7 @@ public struct ModelManagerView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         // Карточка текущего состояния мозга
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("АКТИВНЫЙ МОЗГ (APPLE A17 PRO):")
+                            Text("ЛОКАЛЬНЫЙ ДИАЛОГ")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
                             
@@ -112,6 +113,8 @@ public struct ModelManagerView: View {
                                 Text("Общее хранилище виджета недоступно. Проверь сохранение App Groups при подписи SideStore.")
                                     .font(.caption).foregroundColor(.orange)
                             }
+                            Text(liveActivity.islandStatus).font(.caption)
+                            Button("Показать кота в Dynamic Island") { TamagotchiManager.shared.refreshAutonomousLife() }
                             Text("КАК ДОБАВИТЬ НЕЙРОСЕТИ БЕЗ ПК:")
                                 .font(.caption2)
                                 .foregroundColor(.gray)

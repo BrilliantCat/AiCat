@@ -9,7 +9,7 @@ struct AiCatLiveActivity: Widget {
         ActivityConfiguration(for: AiCatAttributes.self) { context in
             // Экран блокировки (Lock Screen Banner)
             HStack(spacing: 14) {
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
                     .frame(width: 64, height: 64)
                     .padding(8)
                     .background(Color.white.opacity(0.1))
@@ -43,7 +43,7 @@ struct AiCatLiveActivity: Widget {
                 // Развернутый вид (по долгому тапу на Dynamic Island)
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 6) {
-                        CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
+                        CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
                             .frame(width: 40, height: 40)
                         Text("AiCat")
                             .font(.headline)
@@ -71,16 +71,16 @@ struct AiCatLiveActivity: Widget {
                 }
             } compactLeading: {
                 // Левая часть компактного Dynamic Island
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "leading")
-                    .frame(width: 24, height: 24)
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "leading", outfit: context.state.outfit)
+                    .frame(width: 26, height: 26)
             } compactTrailing: {
                 // Правая часть компактного Dynamic Island
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "trailing")
-                    .frame(width: 24, height: 24)
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "trailing", outfit: context.state.outfit)
+                    .frame(width: 26, height: 26)
             } minimal: {
                 // Минимальный вид (когда активно несколько приложений)
-                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
-                    .frame(width: 22, height: 22)
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), outfit: context.state.outfit)
+                    .frame(width: 24, height: 24)
             }
             .widgetURL(URL(string: "aicat://chat"))
         }

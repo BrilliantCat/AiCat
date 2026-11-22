@@ -8,6 +8,7 @@ struct CatSnapshot: Codable {
     var happiness = 90
     var energy = 95
     var sleeping = false
+    var outfit: String? = nil
     var action = "idle"
     var actionUntil = Date.distantPast
 
@@ -90,13 +91,78 @@ struct CatSnapshot: Codable {
 struct CatPicture: View {
     let scene: String
     var islandSide: String? = nil
+    var outfit: String? = nil
 
     var body: some View {
-        let pose = scene == "sleep" ? "sleep" : (scene == "computer" ? "think" : "peek")
-        let resource = islandSide.map { "dynamic-island/\(pose)-\($0)" } ?? "widget/\(scene)"
-        if let url = Bundle.main.url(forResource: resource, withExtension: "png", subdirectory: "AiCat-Visuals"),
-           let picture = UIImage(contentsOfFile: url.path) {
-            Image(uiImage: picture).resizable().scaledToFit().accessibilityLabel("Кот AiCat")
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+            CatPortrait(scene: scene, outfit: outfit)
+                .frame(width: side, height: side)
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
+        .accessibilityLabel("Кот AiCat. \(scene == "sleep" ? "Спит" : "Бодрствует")")
+    }
+}
+
+private struct CatPortrait: View {
+    let scene: String
+    let outfit: String?
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                CatHeadShape()
+                    .foregroundStyle(LinearGradient(colors: [Color(white: 0.72), Color(white: 0.36)],
+                                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                HStack(spacing: size * 0.15) {
+                    eye(size: size)
+                    eye(size: size)
+                }
+                .offset(y: -size * 0.08)
+                if let outfit, outfit.localizedCaseInsensitiveContains("очки") {
+                    Capsule().fill(Color(white: 0.08))
+                        .frame(width: size * 0.6, height: size * 0.18)
+                        .overlay(Capsule().stroke(.mint.opacity(0.6), lineWidth: 1))
+                        .offset(y: -size * 0.08)
+                }
+                Ellipse().fill(Color(red: 0.85, green: 0.57, blue: 0.6))
+                    .frame(width: size * 0.07, height: size * 0.045)
+                    .offset(y: size * 0.04)
+                if scene == "sleep" {
+                    Text("z").font(.system(size: size * 0.18, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.75)).offset(x: size * 0.35, y: -size * 0.3)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+    private func eye(size: CGFloat) -> some View {
+        ZStack {
+            Capsule().fill(Color(red: 0.55, green: 0.88, blue: 0.35))
+            if scene != "sleep" {
+                Capsule().fill(.black).frame(width: size * 0.025)
+                Circle().fill(.white).frame(width: size * 0.025).offset(x: -size * 0.025, y: -size * 0.02)
+            }
+        }
+        .frame(width: size * 0.15, height: size * (scene == "sleep" ? 0.018 : 0.12))
+    }
+}
+
+private struct CatHeadShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + x * rect.width, y: rect.minY + y * rect.height)
+        }
+        path.move(to: point(0.12, 0.45))
+        path.addQuadCurve(to: point(0.12, 0.06), control: point(0.06, 0.12))
+        path.addQuadCurve(to: point(0.33, 0.22), control: point(0.23, 0.06))
+        path.addQuadCurve(to: point(0.67, 0.22), control: point(0.5, 0.13))
+        path.addQuadCurve(to: point(0.88, 0.06), control: point(0.77, 0.06))
+        path.addQuadCurve(to: point(0.88, 0.45), control: point(0.94, 0.12))
+        path.addCurve(to: point(0.5, 0.92), control1: point(1.08, 0.79), control2: point(0.76, 0.94))
+        path.addCurve(to: point(0.12, 0.45), control1: point(0.24, 0.94), control2: point(-0.08, 0.79))
+        path.closeSubpath()
+        return path
     }
 }

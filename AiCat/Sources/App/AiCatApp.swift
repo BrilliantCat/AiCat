@@ -15,6 +15,7 @@ struct AiCatApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
+                .preferredColorScheme(.dark)
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                         TamagotchiManager.shared.loadStateAndApplyDecay()

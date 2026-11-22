@@ -10,7 +10,7 @@ actor LocalInference {
 
     private init() { llama_backend_init() }
 
-    func reply(url: URL, prompt: String, system: String) throws -> String {
+    func reply(url: URL, prompt: String, system: String, history: [(role: String, content: String)] = []) throws -> String {
         var modelParams = llama_model_default_params()
         modelParams.n_gpu_layers = 99
         guard let model = llama_model_load_from_file(url.path, modelParams) else {
@@ -27,9 +27,15 @@ actor LocalInference {
         }
         defer { llama_free(context) }
         let vocab = llama_model_get_vocab(model)
-        let input = "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(prompt)<|im_end|>\n<|im_start|>assistant\n"
+        var messages = history + [(role: "user", content: prompt)]
+        var input = PromptBuilder.formatChatML(system: system, messages: messages)
+        var required = -llama_tokenize(vocab, input, Int32(input.utf8.count), nil, 0, false, true)
+        while required >= 3584 && messages.count > 1 {
+            messages.removeFirst()
+            input = PromptBuilder.formatChatML(system: system, messages: messages)
+            required = -llama_tokenize(vocab, input, Int32(input.utf8.count), nil, 0, false, true)
+        }
         let byteCount = Int32(input.utf8.count)
-        let required = -llama_tokenize(vocab, input, byteCount, nil, 0, false, true)
         guard required > 0, required < 3584 else {
             throw failure("Сообщение и история слишком длинные. Сократи запрос или очисти историю.")
         }

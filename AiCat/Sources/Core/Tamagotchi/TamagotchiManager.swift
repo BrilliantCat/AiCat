@@ -80,6 +80,8 @@ public final class TamagotchiManager: ObservableObject {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         
+        CatActionHandler.shared.state.executionToken = UUID().uuidString
+        CatActionHandler.shared.state.currentAction = .idle
         CatActionHandler.shared.state.moodEmoji = "😻"
         CatActionHandler.shared.state.statusText = "Мурчит от ласки (\(happiness)%)"
         LiveActivityManager.shared.update(status: "Счастье: \(happiness)%", mood: "😻", action: "Мурчит")
@@ -134,6 +136,13 @@ public final class TamagotchiManager: ObservableObject {
         let cat = CatSnapshot.load().projected(at: Date())
         CatActionHandler.shared.state.moodEmoji = cat.mood
         CatActionHandler.shared.state.statusText = cat.label
+        if Date() >= cat.actionUntil {
+            let next: CatActionType = cat.sleeping ? .sleep : .idle
+            if CatActionHandler.shared.state.currentAction != next {
+                CatActionHandler.shared.state.currentAction = next
+                CatActionHandler.shared.state.executionToken = UUID().uuidString
+            }
+        }
         LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood,
                                                          action: cat.label, recordAction: false)
     }
@@ -144,15 +153,7 @@ public final class TamagotchiManager: ObservableObject {
         let cat = CatSnapshot.load().projected(at: Date())
         var status = "САМОЧУВСТВИЕ КОТА (ТАМАГОЧИ): Сытость: \(satiety)%, Счастье: \(happiness)%, Энергия: \(energy)%."
         status += " Сейчас кот: \(cat.label). Завершено занятий: \(UserDefaults.standard.integer(forKey: "aicat.completedLessons")); тренировок: \(UserDefaults.standard.integer(forKey: "aicat.completedWorkouts"))."
-        if satiety < 35 {
-            status += " Кот ОЧЕНЬ голоден! Он раздражен, саркастично намекает на миску с рыбой и ворчит."
-        } else if happiness < 35 {
-            status += " Кот чувствует себя одиноким и заброшенным. Жалуется на нехватку внимания и поглаживаний."
-        } else if energy < 30 {
-            status += " Кот сонный и усталый. Зевает, отвечает лениво и мечтает поспать."
-        } else {
-            status += " Кот сыт, весел, в темных очках и полон энтузиазма! Остроумен, грациозен и готов помочь."
-        }
+        status += " Учитывай состояние в тоне ответа, но не требуй ухода в каждом сообщении. Если пользователь задаёт вопрос, сначала ответь на него."
         return status
     }
 }
