@@ -15,6 +15,7 @@ public struct MainView: View {
     @State private var showModelManager: Bool = false
     @State private var showWardrobe: Bool = false
     @State private var showRAGManager: Bool = false
+    @State private var showDebugLog: Bool = false
     
     @FocusState private var isInputFocused: Bool
     
@@ -81,6 +82,9 @@ public struct MainView: View {
         }
         .sheet(isPresented: $showRAGManager) {
             RAGManagerView()
+        }
+        .sheet(isPresented: $showDebugLog) {
+            DebugLogView()
         }
         .alert(isPresented: $showCertificateInfo) {
             Alert(
@@ -154,6 +158,15 @@ public struct MainView: View {
             Button(action: { showModelManager = true }) {
                 Image(systemName: "cpu.fill")
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
+                    .padding(7)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            
+            // Терминал отладки (Debug Log)
+            Button(action: { showDebugLog = true }) {
+                Image(systemName: "terminal.fill")
+                    .foregroundColor(.yellow)
                     .padding(7)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Circle())

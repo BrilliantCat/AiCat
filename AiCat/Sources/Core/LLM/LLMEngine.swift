@@ -23,7 +23,10 @@ public final class LLMEngine: ObservableObject {
         let ragContext = RAGTool.shared.searchKnowledge(query: trimmed, topK: 2)
         
         // 2. Проверяем наличие установленной GGUF модели
-        let isModelLoaded = await MainActor.run { ModelManager.shared.isModelLoaded }
+        let isModelLoaded = await MainActor.run { 
+            DebugLogger.shared.log("Входящий запрос: \"\(trimmed)\"", level: .info, tag: "Agent")
+            return ModelManager.shared.isModelLoaded 
+        }
         
         // 3. Выполняем инференс или интеллектуальный живой офлайн-диалог
         if isModelLoaded {

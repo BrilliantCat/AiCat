@@ -20,6 +20,17 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
+      - name: Fast Syntax & Compilation Check
+        run: |
+          set -o pipefail
+          echo "=== Fast Syntax & Compilation Check ==="
+          xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee fast_build.log || (echo "=== SYNTAX/TYPE ERROR DETECTED ===" && grep -C 3 -E "(error: |BUILD FAILED)" fast_build.log && exit 65)
+
       - name: Build Xcode Archive
         run: |
           set -o pipefail
