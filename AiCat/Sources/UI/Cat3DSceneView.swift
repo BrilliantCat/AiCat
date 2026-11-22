@@ -83,8 +83,8 @@ public struct Cat3DSceneView: UIViewRepresentable {
         let breatheNode = SCNNode()
         breatheNode.name = "BreatheNode"
         let breatheAction = SCNAction.sequence([
-            SCNAction.scale(to: SCNVector3(1.025, 1.03, 1.025), duration: 1.6),
-            SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 1.6)
+            scaleAction(to: SCNVector3(1.025, 1.03, 1.025), duration: 1.6),
+            scaleAction(from: SCNVector3(1.025, 1.03, 1.025), to: SCNVector3(1.0, 1.0, 1.0), duration: 1.6)
         ])
         breatheNode.runAction(SCNAction.repeatForever(breatheAction), forKey: "breathe_idle")
         catRoot.addChildNode(breatheNode)
@@ -145,8 +145,8 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         let blinkAction = SCNAction.sequence([
             SCNAction.wait(duration: 3.5),
-            SCNAction.scale(to: SCNVector3(1.0, 0.1, 1.0), duration: 0.08),
-            SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 0.08)
+            scaleAction(to: SCNVector3(1.0, 0.1, 1.0), duration: 0.08),
+            scaleAction(from: SCNVector3(1.0, 0.1, 1.0), to: SCNVector3(1.0, 1.0, 1.0), duration: 0.08)
         ])
         leftEye.runAction(SCNAction.repeatForever(blinkAction))
         rightEye.runAction(SCNAction.repeatForever(blinkAction))
@@ -414,6 +414,19 @@ public struct Cat3DSceneView: UIViewRepresentable {
         bell?.isHidden = outfit.contains("худи")
     }
     
+    // SceneKit's built-in scale action only supports a uniform scalar.
+    private func scaleAction(from start: SCNVector3 = SCNVector3(1, 1, 1),
+                             to end: SCNVector3, duration: TimeInterval) -> SCNAction {
+        SCNAction.customAction(duration: duration) { node, elapsed in
+            let progress = duration > 0 ? min(1, max(0, Float(elapsed) / Float(duration))) : 1
+            node.scale = SCNVector3(
+                start.x + (end.x - start.x) * progress,
+                start.y + (end.y - start.y) * progress,
+                start.z + (end.z - start.z) * progress
+            )
+        }
+    }
+
     // Конечно-автоматное выполнение трюков с абсолютным возвратом в baseline
     private func executeCatAction(cat: SCNNode, action: CatActionType) {
         // Останавливаем предыдущую анимацию под ключом
@@ -436,20 +449,20 @@ public struct Cat3DSceneView: UIViewRepresentable {
         switch action {
         case .somersault:
             // 1. Приседание (Squash)
-            let crouch = SCNAction.scale(to: SCNVector3(1.15, 0.85, 1.15), duration: 0.12)
+            let crouch = scaleAction(to: SCNVector3(1.15, 0.85, 1.15), duration: 0.12)
             // 2. Взрывной прыжок вверх (Leap)
             let leapUp = SCNAction.move(to: SCNVector3(0, 1.1, 0), duration: 0.35)
             leapUp.timingMode = .easeOut
             // 3. Сальто назад 360 градусов со стретчем
             let spin = SCNAction.rotateBy(x: -CGFloat(Double.pi * 2), y: 0, z: 0, duration: 0.55)
-            let stretch = SCNAction.scale(to: SCNVector3(0.88, 1.18, 0.88), duration: 0.25)
+            let stretch = scaleAction(from: SCNVector3(1.15, 0.85, 1.15), to: SCNVector3(0.88, 1.18, 0.88), duration: 0.25)
             // 4. Приземление
             let fallDown = SCNAction.move(to: SCNVector3(0, 0, 0), duration: 0.3)
             fallDown.timingMode = .easeIn
             // 5. Отскок и возврат в 100% базу
             let bounceLand = SCNAction.sequence([
-                SCNAction.scale(to: SCNVector3(1.12, 0.9, 1.12), duration: 0.08),
-                SCNAction.scale(to: SCNVector3(1.0, 1.0, 1.0), duration: 0.12),
+                scaleAction(from: SCNVector3(0.88, 1.18, 0.88), to: SCNVector3(1.12, 0.9, 1.12), duration: 0.08),
+                scaleAction(from: SCNVector3(1.12, 0.9, 1.12), to: SCNVector3(1.0, 1.0, 1.0), duration: 0.12),
                 SCNAction.run { node in
                     node.eulerAngles = SCNVector3(0, 0, 0)
                     node.position = SCNVector3(0, 0, 0)
@@ -506,7 +519,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             
         case .sleep:
             let curlDown = SCNAction.group([
-                SCNAction.scale(to: SCNVector3(1.05, 0.85, 1.05), duration: 0.4),
+                scaleAction(to: SCNVector3(1.05, 0.85, 1.05), duration: 0.4),
                 SCNAction.move(to: SCNVector3(0, -0.1, 0), duration: 0.4)
             ])
             cat.runAction(curlDown, forKey: "cat_action")
