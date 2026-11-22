@@ -32,17 +32,44 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: swift-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('project.yml', 'Package.swift') }}
+
+      - name: Resolve Swift package dependencies
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if xcodebuild -resolvePackageDependencies \
+              -project AiCat.xcodeproj -scheme AiCat \
+              -clonedSourcePackagesDirPath SourcePackages \
+              2>&1 | tee "packages-$attempt.log"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              echo "::warning::Package download failed (attempt $attempt of 4). Retrying."
+              sleep "$((attempt * 15))"
+            fi
+          done
+          echo "::error::Swift package download failed after 4 attempts. See packages-*.log."
+          exit 1
+
       - name: Fast Syntax & Compilation Check
         run: |
           set -o pipefail
           echo "=== Fast Syntax & Compilation Check ==="
           xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Debug \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -disableAutomaticPackageResolution \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee fast_build.log || {
-              echo "=== SYNTAX/TYPE ERROR DETECTED ==="
+              echo "=== BUILD CHECK FAILED ==="
               grep -C 2 -E "(error: |BUILD FAILED)" fast_build.log || true
               grep -E "error: " fast_build.log | while IFS= read -r line; do
                 echo "::error::$line"
@@ -56,6 +83,8 @@ jobs:
           set -o pipefail
           simulator=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
           xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Debug \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -disableAutomaticPackageResolution \
             -destination "platform=iOS Simulator,id=$simulator" \
             -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
@@ -67,6 +96,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Release \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -disableAutomaticPackageResolution \
             -destination 'generic/platform=iOS' \
             -archivePath build/AiCat.xcarchive \
             archive \

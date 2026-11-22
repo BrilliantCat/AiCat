@@ -6,3 +6,4 @@ build/
 Frameworks/
 
 .tmp-validation/
+SourcePackages/
