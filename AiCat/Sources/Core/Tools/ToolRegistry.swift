@@ -20,10 +20,12 @@ public final class ToolRegistry {
     public static let shared = ToolRegistry()
     
     public let definitions: [ToolDefinition] = [
+        ToolDefinition(name: "control_workout", description: "Управление текущим занятием",
+                       parametersSchema: ["action": "pause | resume | next | rep | stop"], requiresConfirmation: false),
         ToolDefinition(
             name: "cat_action",
             description: "Управление физическими действиями кота (трюки, анимации, гардероб)",
-            parametersSchema: ["action": "hang_on_island | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "название одежды при dress_up"],
+            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "название одежды при dress_up"],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -77,7 +79,7 @@ public final class ToolRegistry {
         ToolDefinition(
             name: "device_action",
             description: "Управление системными функциями устройства (фонарик, таймер)",
-            parametersSchema: ["command": "flashlight_on | flashlight_off | timer_start | toggle_silent"],
+            parametersSchema: ["command": "flashlight_on | flashlight_off | battery | brightness | copy_text | open_url | maps | run_shortcut | settings | camera | timer_start | timer_cancel", "value": "яркость 0–100, секунды таймера, текст, URL, место или название команды"],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -107,7 +109,7 @@ public final class ToolRegistry {
         ToolDefinition(
             name: "start_workout",
             description: "Запустить интерактивную фитнес-тренировку",
-            parametersSchema: ["workoutType": "pushups | squats | yoga"],
+            parametersSchema: ["workoutType": "pushups | squats | yoga | breathing | mobility | plank", "reps": "количество повторений 1–100"],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -162,7 +164,7 @@ public final class ToolRegistry {
             
         case "search_notes":
             let q = parameters["query"] ?? ""
-            let list = NotesTool.shared.fetchNotes()
+            let list = NotesTool.shared.notes
             let filtered = list.filter { $0.title.localizedCaseInsensitiveContains(q) || $0.content.localizedCaseInsensitiveContains(q) }
             if filtered.isEmpty {
                 return (true, "Заметок по запросу «\(q)» не нашлось.", nil)
@@ -183,13 +185,19 @@ public final class ToolRegistry {
             
         case "device_action":
             let cmd = parameters["command"] ?? ""
-            let res = handleDeviceAction(cmd)
+            let res: String
+            if cmd == "flashlight_on" || cmd == "flashlight_off" {
+                res = await MainActor.run { self.handleDeviceAction(cmd) }
+            } else {
+                res = await PhoneControlTool.shared.execute(command: cmd, value: parameters["value"] ?? "")
+            }
             return (true, res, nil)
             
         case "translate":
             let text = parameters["text"] ?? ""
             let target = parameters["targetLanguage"] ?? "английский"
-            return (true, "Перевод на \(target):\n" + text, nil)
+            let translation = await ModelManager.shared.infer(prompt: text, system: "Переведи на \(target). Выведи только перевод.")
+            return (true, translation, nil)
             
         case "analyze_photo":
             let action = parameters["action"] ?? "ocr"
@@ -209,14 +217,38 @@ public final class ToolRegistry {
             let type = (parameters["workoutType"] ?? "pushups").lowercased()
             let res: String
             if type.contains("squat") || type.contains("присед") {
-                res = await MainActor.run { CatFitnessCoach.shared.startSquats() }
-            } else if type.contains("yoga") || type.contains("йог") {
-                res = await MainActor.run { YogaCoachTool.shared.startWorkout() }
+                res = await MainActor.run { CatFitnessCoach.shared.startSquats(reps: Int(parameters["reps"] ?? "") ?? 20) }
+            } else if ["yoga", "breathing", "mobility", "plank"].contains(type) || type.contains("йог") {
+                res = await MainActor.run { YogaCoachTool.shared.startWorkout(type: type) }
             } else {
-                res = await MainActor.run { CatFitnessCoach.shared.startPushups() }
+                res = await MainActor.run { CatFitnessCoach.shared.startPushups(reps: Int(parameters["reps"] ?? "") ?? 15) }
             }
             return (true, res, nil)
             
+        case "control_workout":
+            let message = await MainActor.run { () -> String in
+                guard YogaCoachTool.shared.isSessionActive || CatFitnessCoach.shared.isWorkoutActive else {
+                    return "Сначала начни занятие, кожаный."
+                }
+                switch parameters["action"] ?? "pause" {
+                case "resume": YogaCoachTool.shared.resume(); CatFitnessCoach.shared.resume()
+                case "next": YogaCoachTool.shared.nextPose()
+                case "rep": CatFitnessCoach.shared.manualRecordRep()
+                case "stop":
+                    CatFitnessCoach.shared.stopWorkout()
+                    _ = YogaCoachTool.shared.stopWorkout()
+                default: YogaCoachTool.shared.pause(); CatFitnessCoach.shared.pause()
+                }
+                if YogaCoachTool.shared.isSessionActive {
+                    return "\(YogaCoachTool.shared.currentExercise.name). \(YogaCoachTool.shared.isPaused ? "Пауза" : "Продолжаем")"
+                }
+                if CatFitnessCoach.shared.isWorkoutActive {
+                    return "\(CatFitnessCoach.shared.currentRepsCount)/\(CatFitnessCoach.shared.targetReps). \(CatFitnessCoach.shared.isPaused ? "Пауза" : "Продолжаем")"
+                }
+                return "Занятие остановлено."
+            }
+            return (true, message, nil)
+
         case "get_status":
             let (satiety, happiness, energy) = await MainActor.run {
                 (TamagotchiManager.shared.satiety, TamagotchiManager.shared.happiness, TamagotchiManager.shared.energy)
@@ -239,7 +271,7 @@ public final class ToolRegistry {
     }
     
     // Системные действия с реальным управлением фонариком
-    private func handleDeviceAction(_ command: String) -> String {
+    @MainActor private func handleDeviceAction(_ command: String) -> String {
         switch command {
         case "flashlight_on":
             if toggleTorch(on: true) {
@@ -253,18 +285,8 @@ public final class ToolRegistry {
             }
             return "Фонарик уже выключен."
             
-        case "timer_start":
-            if let url = URL(string: "clock-timer://"), UIApplication.shared.canOpenURL(url) {
-                UIApplication.shared.open(url)
-                return "Запустил системный таймер."
-            }
-            return "Таймер активирован."
-            
-        case "toggle_silent":
-            return "Политика безопасности iOS запрещает сторонним приложениям переключать режим 'Не беспокоить' напрямую. Ты можешь настроить автоматизацию в приложении 'Команды'."
-            
         default:
-            return "Команда '\(command)' обработана."
+            return "Команда '\(command)' не поддерживается."
         }
     }
     

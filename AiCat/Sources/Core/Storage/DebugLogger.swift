@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 import Darwin
@@ -46,6 +47,7 @@ public final class DebugLogger: ObservableObject {
     @Published public private(set) var entries: [LogEntry] = []
     @Published public private(set) var currentMemoryMB: Double = 0.0
     
+    private let fileQueue = DispatchQueue(label: "AiCat.LogFile")
     private let maxEntries = 500
     private var memoryTimer: Timer?
     
@@ -63,7 +65,7 @@ public final class DebugLogger: ObservableObject {
         let entry = LogEntry(level: level, message: message, tag: tag)
         let line = "[\(entry.formattedTime)] [\(level.rawValue)] [\(tag)] \(message)\n"
         print(line, terminator: "")
-        appendToFile(line)
+        fileQueue.async { self.appendToFile(line) }
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -79,7 +81,7 @@ public final class DebugLogger: ObservableObject {
             self?.entries.removeAll()
         }
         if let url = logFileURL {
-            try? FileManager.default.removeItem(at: url)
+            fileQueue.sync { try? FileManager.default.removeItem(at: url) }
         }
         log("Журнал отладки очищен", level: .info, tag: "Debug")
     }

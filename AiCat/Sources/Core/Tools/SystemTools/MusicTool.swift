@@ -1,9 +1,11 @@
+import Combine
 import Foundation
 import AVFoundation
 
 public final class MusicTool: ObservableObject {
     public static let shared = MusicTool()
     
+    @Published public var lastExportURL: URL?
     @Published public var isPlaying: Bool = false
     
     private var audioEngine: AVAudioEngine?
@@ -121,6 +123,15 @@ public final class MusicTool: ObservableObject {
             }
         }
         
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("AiCat-beat-\(UUID()).caf")
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: audioFormat.settings)
+            try file.write(from: pcmBuffer)
+            lastExportURL = url
+        } catch {
+            lastExportURL = nil
+        }
+
         DispatchQueue.main.async { self.isPlaying = true }
         
         player.stop()

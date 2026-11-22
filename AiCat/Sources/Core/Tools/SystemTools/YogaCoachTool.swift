@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 public struct YogaExercise: Identifiable {
@@ -16,7 +17,7 @@ public final class YogaCoachTool: ObservableObject {
     @Published public var currentExerciseIndex: Int = 0
     @Published public var remainingSeconds: Int = 30
     
-    public let routine: [YogaExercise] = [
+    private static let yoga: [YogaExercise] = [
         YogaExercise(
             name: "Поза Марджариасана («Кошачья спина»)",
             durationSeconds: 30,
@@ -43,74 +44,136 @@ public final class YogaCoachTool: ObservableObject {
         )
     ]
     
+    @Published public private(set) var isPaused = false
+    @Published public private(set) var plan = "yoga"
     private var timer: Timer?
-    
-    private init() {}
-    
-    public var currentExercise: YogaExercise {
-        if currentExerciseIndex < routine.count {
-            return routine[currentExerciseIndex]
-        }
-        return routine[0]
-    }
-    
-    public func startWorkout() -> String {
-        isSessionActive = true
-        currentExerciseIndex = 0
-        let first = routine[0]
-        remainingSeconds = first.durationSeconds
-        
-        CatActionHandler.shared.state.moodEmoji = "🧘‍♂️"
-        CatActionHandler.shared.state.statusText = "Йога: «\(first.name)»"
-        
-        startTimer()
-        
-        // Включаем медитативный Lo-Fi
-        _ = MusicTool.shared.generateBeat(style: "lo-fi")
-        
-        let intro = "Начинаем кошачью йогу! Первое упражнение: «\(first.name)». \(first.catComment)"
-        CatSpeechSynthesizer.shared.speak(text: intro)
-        return intro
-    }
-    
-    public func nextPose() {
-        if currentExerciseIndex + 1 < routine.count {
-            currentExerciseIndex += 1
-            let next = routine[currentExerciseIndex]
-            remainingSeconds = next.durationSeconds
-            CatActionHandler.shared.state.statusText = "Йога: «\(next.name)»"
-            CatSpeechSynthesizer.shared.speak(text: "Следующая поза: «\(next.name)». \(next.catComment)")
-        } else {
-            _ = stopWorkout()
+    private var deadline: Date?
+    private let storageKey = "aicat.lesson"
+
+    public var routine: [YogaExercise] {
+        switch plan {
+        case "breathing":
+            return (0..<4).flatMap { _ in [
+                YogaExercise(name: "Вдох", durationSeconds: 4, catComment: "Спокойно вдохни носом.", instructions: "Дыши в удобном темпе."),
+                YogaExercise(name: "Выдох", durationSeconds: 6, catComment: "Медленно выдохни, расслабь плечи.", instructions: "Без задержки дыхания.")
+            ] }
+        case "mobility":
+            return [
+                YogaExercise(name: "Плечи", durationSeconds: 30, catComment: "Медленно подними и опусти плечи. Затем сделай небольшие круги.", instructions: "Двигайся плавно."),
+                YogaExercise(name: "Шаг на месте", durationSeconds: 45, catComment: "Шагай на месте в удобном темпе.", instructions: "Дыши свободно."),
+                YogaExercise(name: "Потягивания", durationSeconds: 30, catComment: "Потяни руки вверх, затем мягко опусти.", instructions: "Выбирай комфортную амплитуду.")
+            ]
+        case "plank":
+            return [YogaExercise(name: "Планка", durationSeconds: 20, catComment: "Локти под плечами. Можно опереться на колени. Дыши свободно.", instructions: "Остановись при боли."),
+                    YogaExercise(name: "Отдых", durationSeconds: 30, catComment: "Расслабься, кожаный. Сделай спокойный вдох.", instructions: "Восстанови дыхание.")]
+        default: return Self.yoga
         }
     }
-    
-    private func startTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self, self.isSessionActive else { return }
-            
-            if self.remainingSeconds > 1 {
-                self.remainingSeconds -= 1
-                if self.remainingSeconds == 10 {
-                    CatSpeechSynthesizer.shared.speak(text: "Осталось 10 секунд, держись!")
-                }
-            } else {
-                self.nextPose()
+
+    private init() {
+        if let saved = UserDefaults.standard.dictionary(forKey: storageKey),
+           let type = saved["plan"] as? String,
+           let index = saved["index"] as? Int,
+           let seconds = saved["seconds"] as? Int {
+            plan = type
+            if routine.indices.contains(index) && seconds > 0 {
+                currentExerciseIndex = index
+                remainingSeconds = seconds
+                isSessionActive = true
+                isPaused = true
             }
         }
     }
-    
-    public func stopWorkout() -> String {
-        isSessionActive = false
+
+    public var currentExercise: YogaExercise { routine[currentExerciseIndex] }
+
+    public func startWorkout(type: String = "yoga") -> String {
+        CatFitnessCoach.shared.stopWorkout()
+        timer?.invalidate()
+        plan = ["yoga", "breathing", "mobility", "plank"].contains(type) ? type : "yoga"
+        currentExerciseIndex = 0
+        isSessionActive = true
+        isPaused = false
+        remainingSeconds = currentExercise.durationSeconds
+        beginStep()
+        return "Начинаем занятие. \(currentExercise.name). \(currentExercise.catComment)"
+    }
+
+    private func beginStep() {
+        deadline = Date().addingTimeInterval(Double(remainingSeconds))
+        persist()
+        announce()
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+    }
+
+    private func tick() {
+        guard isSessionActive, !isPaused, let deadline else { return }
+        let value = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+        if remainingSeconds != value { remainingSeconds = value; persist() }
+        if value == 0 { nextPose() }
+    }
+
+    private func announce() {
+        let status = "\(currentExercise.name) · \(currentExerciseIndex + 1)/\(routine.count)"
+        CatActionHandler.shared.state.statusText = status
+        LiveActivityManager.shared.update(status: status, mood: "🧘‍♂️", action: isPaused ? "Пауза" : "Занятие")
+        CatSpeechSynthesizer.shared.speak(text: "\(currentExercise.name). \(currentExercise.catComment)")
+    }
+
+    public func pause() {
+        guard isSessionActive, !isPaused else { return }
+        if let deadline { remainingSeconds = max(1, Int(ceil(deadline.timeIntervalSinceNow))) }
+        isPaused = true
         timer?.invalidate()
         timer = nil
-        
-        CatActionHandler.shared.state.moodEmoji = "😼"
-        CatActionHandler.shared.state.statusText = "Йога завершена"
-        
-        let completionText = "Отличная разминка! Тело гибкое, разум спокоен. Время погладить кота!"
-        CatSpeechSynthesizer.shared.speak(text: completionText)
-        return completionText
+        deadline = nil
+        persist()
+        CatSpeechSynthesizer.shared.stop()
+        LiveActivityManager.shared.update(status: currentExercise.name, mood: "🧘‍♂️", action: "Пауза")
+    }
+
+    public func resume() {
+        guard isSessionActive, isPaused else { return }
+        CatFitnessCoach.shared.stopWorkout()
+        isPaused = false
+        beginStep()
+    }
+
+    public func nextPose() {
+        guard isSessionActive else { return }
+        if currentExerciseIndex + 1 == routine.count {
+            _ = stopWorkout(completed: true)
+            return
+        }
+        currentExerciseIndex += 1
+        remainingSeconds = currentExercise.durationSeconds
+        persist()
+        if !isPaused { beginStep() }
+    }
+
+    private func persist() {
+        UserDefaults.standard.set(["plan": plan, "index": currentExerciseIndex,
+                                   "seconds": remainingSeconds], forKey: storageKey)
+    }
+
+    public func stopWorkout(completed: Bool = false) -> String {
+        guard isSessionActive else { return "Занятие уже остановлено." }
+        isSessionActive = false
+        isPaused = false
+        timer?.invalidate()
+        timer = nil
+        deadline = nil
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        let message = completed ? "Занятие завершено, кожаный! Отличная работа." : "Остановил занятие."
+        if completed {
+            UserDefaults.standard.set(UserDefaults.standard.integer(forKey: "aicat.completedLessons") + 1,
+                                      forKey: "aicat.completedLessons")
+        }
+        LiveActivityManager.shared.update(status: message, mood: "😼", action: "На связи")
+        CatSpeechSynthesizer.shared.speak(text: message)
+        return message
     }
 }

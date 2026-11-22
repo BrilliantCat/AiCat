@@ -71,33 +71,9 @@ public struct ModelManagerView: View {
                                 .foregroundColor(.gray)
                             
                             if let b = modelManager.lastBenchmark {
-                                HStack(spacing: 16) {
-                                    VStack(alignment: .leading) {
-                                        Text("TTFT (1-й токен):")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                        Text("\(String(format: "%.1f", b.timeToFirstTokenMs)) мс")
-                                            .font(.headline)
-                                            .foregroundColor(.cyan)
-                                    }
-                                    
-                                    VStack(alignment: .leading) {
-                                        Text("Скорость генерации:")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                        Text("\(String(format: "%.1f", b.tokensPerSecond)) ток/с")
-                                            .font(.headline)
-                                            .foregroundColor(.green)
-                                    }
-                                    
-                                    VStack(alignment: .leading) {
-                                        Text("Память Metal:")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                        Text("\(String(format: "%.0f", b.memoryUsageMB)) МБ")
-                                            .font(.headline)
-                                            .foregroundColor(.yellow)
-                                    }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Полный ответ за \(String(format: "%.1f", b.timeToFirstTokenMs / 1000)) с")
+                                    Text(b.generatedText).font(.caption)
                                 }
                                 .padding(10)
                                 .background(Color.black.opacity(0.3))
@@ -114,7 +90,7 @@ public struct ModelManagerView: View {
                                     } else {
                                         Image(systemName: "speedometer")
                                     }
-                                    Text(modelManager.isBenchmarking ? "Тестирую чип A17 Pro..." : "Запустить тест скорости (Бенчмарк)")
+                                    Text(modelManager.isBenchmarking ? "Генерирую ответ…" : "Проверить реальный ответ модели")
                                 }
                                 .font(.subheadline)
                                 .bold()
@@ -132,6 +108,10 @@ public struct ModelManagerView: View {
                         
                         // Инструкция по установке файлов
                         VStack(alignment: .leading, spacing: 12) {
+                            if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: CatSnapshot.group) == nil {
+                                Text("Общее хранилище виджета недоступно. Проверь сохранение App Groups при подписи SideStore.")
+                                    .font(.caption).foregroundColor(.orange)
+                            }
                             Text("КАК ДОБАВИТЬ НЕЙРОСЕТИ БЕЗ ПК:")
                                 .font(.caption2)
                                 .foregroundColor(.gray)

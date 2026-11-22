@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 public final class CertificateWatchdog: ObservableObject {
@@ -52,7 +53,7 @@ public final class CertificateWatchdog: ObservableObject {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") ??
                         Bundle.main.bundleURL.appendingPathComponent("embedded.mobileprovision") as URL?,
               let data = try? Data(contentsOf: url),
-              let text = String(data: data, encoding: .ascii) else {
+              let text = String(data: data, encoding: .isoLatin1) else {
             return nil
         }
         
@@ -73,7 +74,7 @@ public final class CertificateWatchdog: ObservableObject {
         return nil
     }
     
-    private func notifyUser() {
+    @MainActor private func notifyUser() {
         CatActionHandler.shared.state.moodEmoji = "⏰"
         CatActionHandler.shared.state.statusText = "Сертификат: осталось \(daysRemaining) дн."
     }

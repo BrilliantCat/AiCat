@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 public struct CatNote: Codable, Identifiable {
@@ -29,19 +30,19 @@ public final class NotesTool: ObservableObject {
     public func saveNote(title: String, content: String) -> String {
         let note = CatNote(title: title, content: content)
         notes.insert(note, at: 0)
-        persist()
+        do {
+            let data = try JSONEncoder().encode(notes)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            notes.removeAll { $0.id == note.id }
+            return "Не удалось сохранить заметку: \(error.localizedDescription)"
+        }
         return "Записал в локальный дневник: «\(title)». Надежно сохранено в памяти AiCat."
     }
     
     public func searchNotes(query: String) -> [CatNote] {
         let lower = query.lowercased()
         return notes.filter { $0.title.lowercased().contains(lower) || $0.content.lowercased().contains(lower) }
-    }
-    
-    private func persist() {
-        if let data = try? JSONEncoder().encode(notes) {
-            try? data.write(to: fileURL)
-        }
     }
     
     private func loadNotes() {

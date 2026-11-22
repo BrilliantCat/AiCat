@@ -9,8 +9,8 @@ struct AiCatLiveActivity: Widget {
         ActivityConfiguration(for: AiCatAttributes.self) { context in
             // Экран блокировки (Lock Screen Banner)
             HStack(spacing: 14) {
-                Text(context.state.moodEmoji)
-                    .font(.system(size: 38))
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
+                    .frame(width: 64, height: 64)
                     .padding(8)
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
@@ -35,6 +35,7 @@ struct AiCatLiveActivity: Widget {
                 Spacer()
             }
             .padding()
+            .widgetURL(URL(string: "aicat://chat"))
             .activityBackgroundTint(Color(red: 0.08, green: 0.09, blue: 0.12).opacity(0.95))
             
         } dynamicIsland: { context in
@@ -42,8 +43,8 @@ struct AiCatLiveActivity: Widget {
                 // Развернутый вид (по долгому тапу на Dynamic Island)
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 6) {
-                        Text(context.state.moodEmoji)
-                            .font(.title2)
+                        CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
+                            .frame(width: 40, height: 40)
                         Text("AiCat")
                             .font(.headline)
                             .bold()
@@ -62,7 +63,7 @@ struct AiCatLiveActivity: Widget {
                             .font(.caption)
                             .foregroundColor(.white)
                         Spacer()
-                        Text("Online 🐾")
+                        Text("Офлайн 🐾")
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }
@@ -70,18 +71,18 @@ struct AiCatLiveActivity: Widget {
                 }
             } compactLeading: {
                 // Левая часть компактного Dynamic Island
-                Text(context.state.moodEmoji)
-                    .font(.system(size: 14))
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "leading")
+                    .frame(width: 24, height: 24)
             } compactTrailing: {
                 // Правая часть компактного Dynamic Island
-                Text("AiCat")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(.cyan)
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji), islandSide: "trailing")
+                    .frame(width: 24, height: 24)
             } minimal: {
                 // Минимальный вид (когда активно несколько приложений)
-                Text(context.state.moodEmoji)
-                    .font(.system(size: 12))
+                CatPicture(scene: CatSnapshot.scene(mood: context.state.moodEmoji))
+                    .frame(width: 22, height: 22)
             }
+            .widgetURL(URL(string: "aicat://chat"))
         }
     }
 }

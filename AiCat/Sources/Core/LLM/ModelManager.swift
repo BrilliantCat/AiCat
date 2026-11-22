@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 
@@ -17,6 +18,7 @@ public final class ModelManager: ObservableObject {
     @Published public var modelPathInfo: String = ""
     @Published public var ggufMetadata: GGUFMetadata? = nil
     
+    @Published public var diffusionURL: URL? = nil
     @Published public var isDiffusionLoaded: Bool = false
     @Published public var diffusionPathInfo: String = ""
     
@@ -44,8 +46,10 @@ public final class ModelManager: ObservableObject {
         let targetFileName = "qwen2.5-3b-instruct-q4_k_m.gguf"
         var candidateURLs: [URL] = [
             docs.appendingPathComponent("Models").appendingPathComponent(targetFileName),
+            docs.appendingPathComponent("Model").appendingPathComponent(targetFileName),
             docs.appendingPathComponent(targetFileName),
             bundle.appendingPathComponent("Models").appendingPathComponent(targetFileName),
+            bundle.appendingPathComponent("Model").appendingPathComponent(targetFileName),
             bundle.appendingPathComponent(targetFileName)
         ]
         
@@ -66,7 +70,7 @@ public final class ModelManager: ObservableObject {
                         self.activeModelName = "\(meta.architecture) (GGUF \(meta.quantization))"
                         self.isModelLoaded = true
                         self.ggufMetadata = meta
-                        self.modelPathInfo = "Файл: \(url.lastPathComponent) (\(String(format: "%.2f", meta.fileSizeGB)) ГБ). Нейросеть активна на A17 Pro!"
+                        self.modelPathInfo = "Файл: \(url.lastPathComponent) (\(String(format: "%.2f", meta.fileSizeGB)) ГБ). Файл найден. Загрузка при первом запросе."
                     }
                     return
                 }
@@ -74,6 +78,7 @@ public final class ModelManager: ObservableObject {
         }
         
         DispatchQueue.main.async {
+            self.activeModelURL = nil
             self.isModelLoaded = false
             self.activeModelName = "Модель не найдена в папке"
             self.modelPathInfo = "Положи qwen2.5-3b-instruct-q4_k_m.gguf в папку AiCat/Models через приложение 'Файлы'"
@@ -87,6 +92,10 @@ public final class ModelManager: ObservableObject {
         let bundle = Bundle.main.bundleURL
         
         let candidateDirs: [URL] = [
+            bundle.appendingPathComponent("Model").appendingPathComponent("sd_coreml"),
+            bundle.appendingPathComponent("Model").appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
+            docs.appendingPathComponent("Model").appendingPathComponent("sd_coreml"),
+            docs.appendingPathComponent("Model").appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
             bundle.appendingPathComponent("Models").appendingPathComponent("sd_coreml"),
             bundle.appendingPathComponent("Models").appendingPathComponent("coreml-stable-diffusion-v1-5_split_einsum_compiled"),
             bundle.appendingPathComponent("sd_coreml"),
@@ -99,8 +108,12 @@ public final class ModelManager: ObservableObject {
         
         for dir in candidateDirs {
             var isDir: ObjCBool = false
-            if fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue {
+            if fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+               ["TextEncoder.mlmodelc", "VAEDecoder.mlmodelc", "vocab.json", "merges.txt"].allSatisfy({ fm.fileExists(atPath: dir.appendingPathComponent($0).path) }),
+               (fm.fileExists(atPath: dir.appendingPathComponent("Unet.mlmodelc").path) ||
+                ["UnetChunk1.mlmodelc", "UnetChunk2.mlmodelc"].allSatisfy({ fm.fileExists(atPath: dir.appendingPathComponent($0).path) })) {
                 DispatchQueue.main.async {
+                    self.diffusionURL = dir
                     self.isDiffusionLoaded = true
                     self.diffusionPathInfo = "CoreML Stable Diffusion найдена в \(dir.lastPathComponent)!"
                 }
@@ -109,6 +122,7 @@ public final class ModelManager: ObservableObject {
         }
         
         DispatchQueue.main.async {
+            self.diffusionURL = nil
             self.isDiffusionLoaded = false
             self.diffusionPathInfo = "Папка coreml-stable-diffusion-v1-5_split_einsum_compiled не найдена."
         }
@@ -116,56 +130,32 @@ public final class ModelManager: ObservableObject {
     
     // Инференс через локальный движок
     public func infer(prompt: String, system: String) async -> String {
-        // Симулируем ответ модели, если модель загружена, с формированием JSON-вызова или текстового ответа
-        let lower = prompt.lowercased()
-        if lower.contains("напомни") {
-            return """
-            {
-              "thought": "Хозяин просит напомнить задачу.",
-              "tool": "create_reminder",
-              "parameters": {
-                "title": "\(prompt)"
-              },
-              "reply_text": "Записал в напоминания! Не забудь выполнить."
-            }
-            """
+        guard let url = activeModelURL else { return "Файл Qwen не найден. Открой меню моделей." }
+        do {
+            return try await LocalInference.shared.reply(url: url, prompt: prompt, system: system)
+        } catch {
+            return "Не удалось выполнить запрос: \(error.localizedDescription)"
         }
-        return "*Поправил темные очки*. Насчет «\(prompt)» — отличная мысль, кожаный! Давай воплотим это в жизнь."
     }
-    
-    // Запуск бенчмарка производительности чипа A17 Pro
+
     public func runBenchmark(completion: @escaping (BenchmarkResult) -> Void) {
-        DispatchQueue.main.async { self.isBenchmarking = true }
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let startTime = CACurrentMediaTime()
-            
-            // Прогрев и замер первого токена
-            usleep(120_000) // 120 мс имитация первого токена на A17 Pro
-            let ttft = (CACurrentMediaTime() - startTime) * 1000.0
-            
-            // Генерация 40 токенов
-            usleep(480_000) // 480 мс на 40 токенов = ~32 токена/сек
-            let totalTime = CACurrentMediaTime() - startTime
-            let tps = 40.0 / max(0.1, (totalTime - (ttft / 1000.0)))
-            
-            let res = BenchmarkResult(
-                timeToFirstTokenMs: ttft,
-                tokensPerSecond: tps,
-                generatedText: "AiCat на чипе Apple A17 Pro готов к мгновенному офлайн-диалогу!",
-                memoryUsageMB: 1820.0
-            )
-            
-            DispatchQueue.main.async {
-                self?.isBenchmarking = false
-                self?.lastBenchmark = res
-                completion(res)
+        isBenchmarking = true
+        Task {
+            let start = Date()
+            let output = await infer(prompt: "Привет! Представься одним предложением.", system: "Ты AiCat. Отвечай по-русски.")
+            let elapsed = Date().timeIntervalSince(start) * 1000
+            await MainActor.run {
+                let result = BenchmarkResult(timeToFirstTokenMs: elapsed, tokensPerSecond: 0,
+                                             generatedText: output, memoryUsageMB: 0)
+                self.lastBenchmark = result
+                self.isBenchmarking = false
+                completion(result)
             }
         }
     }
-    
+
     public func handleMemoryWarning() {
         // Корректная выгрузка контекста при нехватке памяти на бесплатном профиле
-        print("AiCat: Received memory warning. Unloading cache.")
+        DebugLogger.shared.log("Предупреждение памяти. Модели освобождаются после каждой задачи.", level: .warning, tag: "Memory")
     }
 }

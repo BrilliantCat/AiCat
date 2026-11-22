@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 
@@ -19,8 +20,14 @@ public final class LLMEngine: ObservableObject {
             return ("*Кот с любопытством посмотрел на тебя из-под черных очков*: Ты позвал меня, но молчишь, кожаный! Чего задумал?", nil)
         }
         
+        if let command = directCommand(trimmed) {
+            let result = await ToolRegistry.shared.executeTool(name: command.0, parameters: command.1)
+            await MainActor.run { self.lastToolExecuted = command.0 }
+            return (result.result, result.image)
+        }
+
         // 1. Извлекаем контекст из локальной базы знаний (RAG BM25)
-        let ragContext = RAGTool.shared.searchKnowledge(query: trimmed, topK: 2)
+        let ragContext = String(RAGTool.shared.searchKnowledge(query: trimmed, topK: 2).prefix(1600))
         
         // 2. Проверяем наличие установленной GGUF модели
         let isModelLoaded = await MainActor.run { 
@@ -40,7 +47,8 @@ public final class LLMEngine: ObservableObject {
     private func runGGUFAgentLoop(userPrompt: String, ragContext: String) async -> (text: String, image: UIImage?) {
         let systemPrompt = PromptBuilder.buildSystemPrompt(ragContext: ragContext)
         let moodPrompt = await MainActor.run { TamagotchiManager.shared.moodContextPrompt() }
-        let fullSystem = systemPrompt + "\n" + moodPrompt
+        let history = ChatStorage.shared.loadMessages().dropLast().suffix(4).map { "\($0.sender == .user ? "Пользователь" : "Кот"): \($0.text.prefix(500))" }.joined(separator: "\n")
+        let fullSystem = systemPrompt + "\n" + moodPrompt + "\nПредыдущие сообщения для контекста:\n" + history
         
         // Запрос к модели Qwen 2.5
         let rawModelOutput = await ModelManager.shared.infer(prompt: userPrompt, system: fullSystem)
@@ -50,10 +58,6 @@ public final class LLMEngine: ObservableObject {
             let toolRes = await ToolRegistry.shared.executeTool(name: toolCall.tool, parameters: toolCall.parameters ?? [:])
             await MainActor.run { self.lastToolExecuted = toolCall.tool }
             
-            // Если инструмент вернул reply_text из JSON модели
-            if let customReply = toolCall.reply_text, !customReply.isEmpty {
-                return (customReply, toolRes.image)
-            }
             return (toolRes.result, toolRes.image)
         }
         
@@ -252,27 +256,62 @@ public final class LLMEngine: ObservableObject {
         }
         
         // 12. ЖИВЫЕ ОСТРОУМНЫЕ РАЗГОВОРНЫЕ ОТВЕТЫ
-        let thoughts = [
-            "*Шевельнул ухом и с интересом посмотрел на тебя*. Насчет «\(userPrompt)» — мысль любопытная! Кошачья мудрость говорит: если сомневаешься, сделай паузу, выпей кофе, а потом действуй уверенно.",
-            "Слушаю тебя внимательно! По поводу «\(userPrompt)» скажу так: звучит как отличный план. Давай сделаем это играючи, а потом отметим победу чем-нибудь вкусным!",
-            "*Поправил черные очки лапой*. Хм, «\(userPrompt)»? А ты умеешь озадачить! Я на твоей стороне, так что давай разберемся с этим прямо сейчас."
-        ]
-        return (thoughts.randomElement()!, nil)
+        return ("Для свободного разговора установи Qwen в папку Models. Сейчас доступны команды ухода за котом и инструменты.", nil)
     }
     
+    private func directCommand(_ text: String) -> (String, [String: String])? {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let controls = ["пауза": "pause", "продолжить тренировку": "resume", "продолжить занятие": "resume",
+                        "следующая поза": "next", "стоп тренировка": "stop", "стоп занятие": "stop", "засчитай повтор": "rep"]
+        if let action = controls[lower] { return ("control_workout", ["action": action]) }
+        let lessons = ["дыхание": "breathing", "начни дыхание": "breathing", "разминка": "mobility",
+                       "начни разминку": "mobility", "планка": "plank"]
+        if let type = lessons[lower] { return ("start_workout", ["workoutType": type]) }
+        if ["заряд батареи", "сколько заряда"].contains(lower) { return ("device_action", ["command": "battery"]) }
+        if lower == "отмени таймер" { return ("device_action", ["command": "timer_cancel"]) }
+        let prefixes = ["яркость ": "brightness", "скопируй ": "copy_text", "открой сайт ": "open_url",
+                        "найди на карте ": "maps", "запусти команду ": "run_shortcut"]
+        for (prefix, command) in prefixes where lower.hasPrefix(prefix) {
+            return ("device_action", ["command": command, "value": String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)])
+        }
+        if lower.hasPrefix("таймер ") {
+            let parts = lower.split(separator: " ")
+            if parts.count >= 2, let number = Double(parts[1].replacingOccurrences(of: ",", with: ".")) {
+                let seconds = number * (lower.contains("мин") ? 60 : 1)
+                return ("device_action", ["command": "timer_start", "value": String(seconds)])
+            }
+        }
+        return nil
+    }
+
     // Робастный парсер вызова инструмента из ответа модели
     public func parseToolCall(from text: String) -> ToolCallPayload? {
-        guard let regex = try? NSRegularExpression(pattern: "\\{[\\s\\S]*?\"tool\"[\\s\\S]*?\\}", options: []) else {
-            return nil
-        }
-        let ns = text as NSString
-        let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: ns.length))
-        
-        for m in matches {
-            let jsonString = ns.substring(with: m.range)
-            if let data = jsonString.data(using: .utf8),
-               let payload = try? JSONDecoder().decode(ToolCallPayload.self, from: data) {
-                return payload
+        var depth = 0
+        var quoted = false
+        var escaped = false
+        var candidate = ""
+        for character in text {
+            if depth == 0 {
+                guard character == "{" else { continue }
+                candidate = ""
+                quoted = false
+                escaped = false
+            }
+            candidate.append(character)
+            if quoted {
+                if escaped { escaped = false }
+                else if character == "\\" { escaped = true }
+                else if character == "\"" { quoted = false }
+                continue
+            }
+            if character == "\"" { quoted = true }
+            else if character == "{" { depth += 1 }
+            else if character == "}" {
+                depth -= 1
+                if depth == 0, let data = candidate.data(using: .utf8),
+                   let payload = try? JSONDecoder().decode(ToolCallPayload.self, from: data) {
+                    return payload
+                }
             }
         }
         return nil

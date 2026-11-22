@@ -1,5 +1,7 @@
+import Combine
 import Foundation
 import UIKit
+import WidgetKit
 
 @MainActor
 public final class TamagotchiManager: ObservableObject {
@@ -23,49 +25,38 @@ public final class TamagotchiManager: ObservableObject {
     
     // Загрузка состояния и расчет естественного убывания параметров со временем (по Date)
     public func loadStateAndApplyDecay() {
-        if defaults.object(forKey: keySatiety) != nil {
-            satiety = defaults.integer(forKey: keySatiety)
-            happiness = defaults.integer(forKey: keyHappiness)
-            energy = defaults.integer(forKey: keyEnergy)
-            isSleeping = defaults.bool(forKey: keyIsSleeping)
+        var snapshot = CatSnapshot.load()
+        if CatSnapshot.defaults.data(forKey: "catSnapshot") == nil,
+           defaults.object(forKey: keySatiety) != nil {
+            snapshot.satiety = defaults.integer(forKey: keySatiety)
+            snapshot.happiness = defaults.integer(forKey: keyHappiness)
+            snapshot.energy = defaults.integer(forKey: keyEnergy)
+            snapshot.sleeping = defaults.bool(forKey: keyIsSleeping)
+            snapshot.date = defaults.object(forKey: keyLastUpdate) as? Date ?? Date()
+            snapshot.save()
         }
-        
-        let lastDate = (defaults.object(forKey: keyLastUpdate) as? Date) ?? Date()
-        let elapsedHours = Date().timeIntervalSince(lastDate) / 3600.0
-        
-        if elapsedHours > 0.05 {
-            // Сытость убывает примерно на 4% в час
-            let satietyDecay = Int(elapsedHours * 4.0)
-            satiety = max(10, satiety - satietyDecay)
-            
-            // Счастье убывает на 3% в час без внимания
-            let happinessDecay = Int(elapsedHours * 3.0)
-            happiness = max(15, happiness - happinessDecay)
-            
-            // Если кот спал — энергия восстановилась, если бодрствовал — устал
-            if isSleeping {
-                let energyRecovery = Int(elapsedHours * 15.0)
-                energy = min(100, energy + energyRecovery)
-                if energy >= 95 { isSleeping = false }
-            } else {
-                let energyDecay = Int(elapsedHours * 4.0)
-                energy = max(10, energy - energyDecay)
-            }
-        }
-        
-        saveState()
+        if CatSnapshot.defaults.data(forKey: "catSnapshot") == nil { snapshot.save() }
+        let current = snapshot.projected(at: Date())
+        satiety = current.satiety
+        happiness = current.happiness
+        energy = current.energy
+        isSleeping = current.sleeping
     }
-    
+
     public func saveState() {
-        defaults.set(satiety, forKey: keySatiety)
-        defaults.set(happiness, forKey: keyHappiness)
-        defaults.set(energy, forKey: keyEnergy)
-        defaults.set(isSleeping, forKey: keyIsSleeping)
-        defaults.set(Date(), forKey: keyLastUpdate)
+        var snapshot = CatSnapshot.load()
+        snapshot.date = Date()
+        snapshot.satiety = satiety
+        snapshot.happiness = happiness
+        snapshot.energy = energy
+        snapshot.sleeping = isSleeping
+        snapshot.save()
+        WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
     }
-    
+
     // Покормить кота рыбкой 🐟
     public func feedFish() -> String {
+        loadStateAndApplyDecay()
         satiety = min(100, satiety + 30)
         happiness = min(100, happiness + 15)
         saveState()
@@ -82,6 +73,7 @@ public final class TamagotchiManager: ObservableObject {
     
     // Погладить кота (ласка и мурчание)
     public func petCat() -> String {
+        loadStateAndApplyDecay()
         happiness = min(100, happiness + 20)
         saveState()
         
@@ -97,7 +89,10 @@ public final class TamagotchiManager: ObservableObject {
     
     // Уложить спать
     public func sleep() -> String {
+        loadStateAndApplyDecay()
         isSleeping = true
+        CatActionHandler.shared.state.currentAction = .sleep
+        CatActionHandler.shared.state.executionToken = UUID().uuidString
         saveState()
         
         CatActionHandler.shared.state.moodEmoji = "💤"
@@ -109,8 +104,10 @@ public final class TamagotchiManager: ObservableObject {
     
     // Разбудить
     public func wake() -> String {
+        loadStateAndApplyDecay()
         isSleeping = false
-        energy = min(100, energy + 25)
+        CatActionHandler.shared.state.currentAction = .idle
+        CatActionHandler.shared.state.executionToken = UUID().uuidString
         saveState()
         
         CatActionHandler.shared.state.moodEmoji = "😼"
@@ -120,9 +117,33 @@ public final class TamagotchiManager: ObservableObject {
         return "*Потянулся, зевнул и поправил черные очки*. Я проснулся, кожаный! Что за задачи на повестке?"
     }
     
+    public func play() -> String {
+        loadStateAndApplyDecay()
+        guard energy >= 20, !isSleeping else { return "Кожаный, сначала дай мне выспаться." }
+        happiness = min(100, happiness + 15)
+        energy = max(10, energy - 8)
+        satiety = max(10, satiety - 3)
+        saveState()
+        _ = CatActionHandler.shared.execute(action: "somersault")
+        LiveActivityManager.shared.update(status: "Играет с клубком", mood: "🧶", action: "Игра")
+        return "Поймал клубок! Ещё раунд, кожаный?"
+    }
+
+    public func refreshAutonomousLife() {
+        loadStateAndApplyDecay()
+        let cat = CatSnapshot.load().projected(at: Date())
+        CatActionHandler.shared.state.moodEmoji = cat.mood
+        CatActionHandler.shared.state.statusText = cat.label
+        LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood,
+                                                         action: cat.label, recordAction: false)
+    }
+
     // Формирование системного контекста настроения кота для LLM-промпта
     public func moodContextPrompt() -> String {
+        loadStateAndApplyDecay()
+        let cat = CatSnapshot.load().projected(at: Date())
         var status = "САМОЧУВСТВИЕ КОТА (ТАМАГОЧИ): Сытость: \(satiety)%, Счастье: \(happiness)%, Энергия: \(energy)%."
+        status += " Сейчас кот: \(cat.label). Завершено занятий: \(UserDefaults.standard.integer(forKey: "aicat.completedLessons")); тренировок: \(UserDefaults.standard.integer(forKey: "aicat.completedWorkouts"))."
         if satiety < 35 {
             status += " Кот ОЧЕНЬ голоден! Он раздражен, саркастично намекает на миску с рыбой и ворчит."
         } else if happiness < 35 {

@@ -3,6 +3,7 @@ import Foundation
 public final class ChatStorage {
     public static let shared = ChatStorage()
     
+    private let queue = DispatchQueue(label: "AiCat.ChatStorage")
     private let fileName = "chat_history.json"
     
     private var fileURL: URL {
@@ -13,6 +14,10 @@ public final class ChatStorage {
     private init() {}
     
     public func loadMessages() -> [ChatMessage] {
+        queue.sync { readMessages() }
+    }
+
+    private func readMessages() -> [ChatMessage] {
         guard FileManager.default.fileExists(atPath: fileURL.path),
               let data = try? Data(contentsOf: fileURL),
               let messages = try? JSONDecoder().decode([ChatMessage].self, from: data),
@@ -28,7 +33,7 @@ public final class ChatStorage {
     }
     
     public func saveMessages(_ messages: [ChatMessage]) {
-        DispatchQueue.global(qos: .background).async { [weak self] in
+        queue.async { [weak self] in
             guard let self = self else { return }
             // Сохраняем последние 100 сообщений
             let toSave = Array(messages.suffix(100))
@@ -39,6 +44,6 @@ public final class ChatStorage {
     }
     
     public func clear() {
-        try? FileManager.default.removeItem(at: fileURL)
+        queue.sync { try? FileManager.default.removeItem(at: fileURL) }
     }
 }

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import AVFoundation
 
@@ -39,14 +40,15 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         
         // Подбираем лучший русский голос
         let ruVoices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.starts(with: "ru") }
-        utterance.voice = ruVoices.first(where: { $0.quality == .enhanced || $0.quality == .premium })
+        utterance.voice = ruVoices.filter { $0.gender == .male }.sorted { $0.quality.rawValue > $1.quality.rawValue }.first
+                       ?? ruVoices.first(where: { $0.quality == .enhanced || $0.quality == .premium })
                        ?? ruVoices.first
                        ?? AVSpeechSynthesisVoice(language: "ru-RU")
                        ?? AVSpeechSynthesisVoice(language: "en-US")
         
         // Фирменный голос AiCat: энергичный, кошачий, живой
-        utterance.rate = 0.51
-        utterance.pitchMultiplier = 1.15
+        utterance.rate = 0.46
+        utterance.pitchMultiplier = 0.95
         utterance.volume = 1.0
         
         synthesizer.speak(utterance)

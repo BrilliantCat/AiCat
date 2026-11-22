@@ -4,10 +4,12 @@ import ActivityKit
 @main
 struct AiCatApp: App {
     @StateObject private var speechRecognizer = OfflineSpeechRecognizer.shared
+    private let lifeTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     @Environment(\.scenePhase) private var scenePhase
     
     init() {
         createAppDirectories()
+        _ = PhoneControlTool.shared
     }
     
     var body: some Scene {
@@ -15,16 +17,34 @@ struct AiCatApp: App {
             MainView()
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        LiveActivityManager.shared.startOrUpdateActivity()
+                        TamagotchiManager.shared.loadStateAndApplyDecay()
+                        let cat = CatSnapshot.load().projected(at: Date())
+                        LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood, action: cat.label, recordAction: false)
                         checkBackTapLaunch()
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase != .active {
+                        YogaCoachTool.shared.pause()
+                        CatFitnessCoach.shared.pause()
+                    }
                     if newPhase == .active {
+                        TamagotchiManager.shared.loadStateAndApplyDecay()
+                        let cat = CatSnapshot.load().projected(at: Date())
+                        LiveActivityManager.shared.startOrUpdateActivity(status: cat.label, mood: cat.mood, action: cat.label, recordAction: false)
                         checkBackTapLaunch()
                     }
                 }
+                .onReceive(lifeTimer) { _ in
+                    if scenePhase == .active && !YogaCoachTool.shared.isSessionActive && !CatFitnessCoach.shared.isWorkoutActive {
+                        TamagotchiManager.shared.refreshAutonomousLife()
+                    }
+                }
+                .onOpenURL { url in
+                    if url.scheme == "aicat" { TamagotchiManager.shared.loadStateAndApplyDecay() }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("WakeAiCatTriggered"))) { _ in
+                    UserDefaults.standard.set(false, forKey: "startListeningOnLaunch")
                     triggerVoiceListening()
                 }
         }
@@ -54,7 +74,8 @@ struct AiCatApp: App {
     private func triggerVoiceListening() {
         speechRecognizer.requestPermissions { granted in
             if granted {
-                try? speechRecognizer.startListening()
+                do { try speechRecognizer.startListening() }
+                catch { speechRecognizer.errorMessage = error.localizedDescription }
             }
         }
     }

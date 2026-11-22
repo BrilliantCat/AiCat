@@ -30,7 +30,6 @@ public struct PetCatLiveIntent: LiveActivityIntent {
     @MainActor
     public func perform() async throws -> some IntentResult {
         _ = TamagotchiManager.shared.petCat()
-        _ = CatActionHandler.shared.pet()
         return .result()
     }
 }

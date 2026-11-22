@@ -13,6 +13,11 @@ settings:
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_REQUIRED: "NO"
 
+packages:
+  StableDiffusion:
+    url: https://github.com/apple/ml-stable-diffusion
+    exactVersion: 1.1.1
+
 targets:
   AiCat:
     type: application
@@ -21,9 +26,23 @@ targets:
     sources:
       - path: AiCat/Sources
       - path: Assets/Assets.xcassets
+      - path: AiCat-Visuals
+        type: folder
+        buildPhase: resources
+      - path: AiCat-Animation
+        type: folder
+        buildPhase: resources
     dependencies:
+      - framework: Frameworks/llama.xcframework
+        embed: false
+      - package: StableDiffusion
+        product: StableDiffusion
       - target: AiCatWidget
         embed: true
+    entitlements:
+      path: AiCat/AiCat.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.brilliantcat.aicat]
     info:
       path: AiCat/Info.plist
       properties:
@@ -49,6 +68,9 @@ targets:
         NSCameraUsageDescription: "AiCat использует камеру для анализа фото."
         NSPhotoLibraryUsageDescription: "AiCat редактирует фото по твоим командам."
         NSPhotoLibraryAddUsageDescription: "AiCat сохраняет созданные изображения в медиатеку Фото."
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [aicat]
+        NSMotionUsageDescription: "AiCat считает движения во время тренировки."
         NSSupportsLiveActivities: true
     settings:
       base:
@@ -66,7 +88,15 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: AiCatWidget
+      - path: AiCat-Visuals
+        type: folder
+        buildPhase: resources
+      - path: AiCat/Sources/App/CatSnapshot.swift
       - path: AiCat/Sources/App/AiCatAttributes.swift
+    entitlements:
+      path: AiCatWidget/AiCatWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.brilliantcat.aicat]
     info:
       path: AiCatWidget/Info.plist
       properties:
@@ -89,6 +119,23 @@ targets:
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGN_IDENTITY: ""
 
+  AiCatTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AiCatTests
+    dependencies:
+      - target: AiCat
+    settings:
+      base:
+        GENERATE_INFOPLIST: "YES"
 
-        CODE_SIGNING_REQUIRED: "NO"
-        CODE_SIGN_IDENTITY: ""
+schemes:
+  AiCat:
+    build:
+      targets:
+        AiCat: all
+    test:
+      targets:
+        - AiCatTests

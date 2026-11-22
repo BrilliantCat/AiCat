@@ -26,7 +26,7 @@ public struct PromptBuilder {
         
         СИСТЕМНЫЕ ИНСТРУМЕНТЫ (TOOLS):
         Когда хозяин просит реальное действие, вызывай строгий JSON:
-        1. cat_action(action: String, item: String?) — действия кота: "hang_on_island" (повиснуть на лапках), "wash" (помыться), "somersault" (сальто), "play" (поиграть), "dress_up" (одеться), "take_off" (снять), "sleep" (уснуть), "wake" (проснуться), "pet" (погладить).
+        1. cat_action(action: String, item: String?) — действия кота: "hang_on_island" (повиснуть на лапках), "wash" (помыться), "somersault" (сальто), "play" (поиграть), "dress_up" (одеться), "take_off" (снять), "sleep" (уснуть), "wake" (проснуться), "pet" (погладить), "feed" (покормить).
         2. create_reminder(title: String, dueDate: String?) — создать напоминание.
         3. get_reminders(date: String?) — посмотреть напоминания.
         4. create_calendar_event(title: String, startDate: String, endDate: String) — добавить встречу в календарь.
@@ -35,11 +35,12 @@ public struct PromptBuilder {
         7. search_notes(query: String) — найти заметку.
         8. search_knowledge_base(query: String) — поиск по документам хозяина (RAG).
         9. open_app(appName: String) — запустить приложение (telegram, youtube, whatsapp, camera, settings, music, maps, calculator, notes).
-        10. device_action(command: String) — flashlight_on (включить фонарик), flashlight_off (выключить фонарик), timer_start.
+        10. device_action(command: String, value: String?) — flashlight_on (включить фонарик), flashlight_off (выключить фонарик), timer_start, timer_cancel, battery, brightness, copy_text, open_url, maps, run_shortcut, settings, camera. Для device_action передавай value: секунды таймера, яркость 0–100, текст, URL, место или точное название установленной команды.
         11. translate(text: String, targetLanguage: String) — перевод текста.
-        12. generate_image(prompt: String) — нарисовать красивый арт.
+        12. generate_image(prompt: String) — нарисовать картинку. Параметр prompt пиши по-английски для Stable Diffusion.
         13. play_music(style: String) — включить бит (lo-fi, cyberpunk, 8-bit).
-        14. start_workout(workoutType: String) — pushups (отжимания), squats (приседания), yoga (йога).
+        14. start_workout(workoutType: String) — pushups (отжимания), squats (приседания), yoga (йога), breathing (дыхание), mobility (разминка), plank (планка). Дополнительный параметр reps: число повторений для pushups или squats.
+        16. control_workout(action: String) — pause, resume, next (следующая поза), rep (засчитать повтор), stop.
         15. get_status() — статус кота (сытость, настроение).
         
         ФОРМАТ ВЫЗОВА:

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import PDFKit
 
@@ -32,6 +33,7 @@ public final class RAGTool: ObservableObject {
     private let metaStorageURL: URL
     
     // Параметры BM25
+    private let storageQueue = DispatchQueue(label: "AiCat.RAGStorage")
     private let k1: Double = 1.2
     private let b: Double = 0.75
     
@@ -64,9 +66,9 @@ public final class RAGTool: ObservableObject {
     private static func stemRussian(_ word: String) -> String {
         var w = word
         let suffixes = [
-            "ость", "ости", "ство", "ения", "ение", "ами", "ями", "ов", "ев", "ей", "ам", "ям",
+            "ание", "ания", "ость", "ости", "ство", "ения", "ение", "ами", "ями", "ов", "ев", "ей", "ам", "ям",
             "ах", "ях", "ую", "юю", "ой", "ей", "ем", "ом", "ым", "им", "ая", "яя", "ое", "ее",
-            "ый", "ий", "ых", "их", "ать", "ять", "еть", "ить", "ся", "сь", "ал", "ил", "ел"
+            "ый", "ий", "ых", "их", "ать", "ять", "еть", "ить", "ся", "сь", "ал", "ил", "ел", "а", "ы", "и", "у", "я", "е"
         ]
         for s in suffixes {
             if w.count > s.count + 2 && w.hasSuffix(s) {
@@ -89,6 +91,7 @@ public final class RAGTool: ObservableObject {
             }
         }
         
+        indexedDocuments.removeAll { $0.sourceName == name }
         indexedDocuments.append(contentsOf: newChunks)
         documentsMeta.removeAll { $0.name == name }
         documentsMeta.append(IndexedDocumentMeta(id: UUID(), name: name, chunkCount: newChunks.count, dateAdded: Date()))
@@ -97,6 +100,8 @@ public final class RAGTool: ObservableObject {
     
     // Импорт документа по URL (например, через UIDocumentPicker)
     public func importDocument(url: URL) -> (success: Bool, message: String) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let ext = url.pathExtension.lowercased()
         let name = url.lastPathComponent
         
@@ -212,12 +217,14 @@ public final class RAGTool: ObservableObject {
     }
     
     private func saveData() {
-        DispatchQueue.global(qos: .background).async { [weak self] in
+        let chunks = indexedDocuments
+        let metadata = documentsMeta
+        storageQueue.async { [weak self] in
             guard let self = self else { return }
-            if let data = try? JSONEncoder().encode(self.indexedDocuments) {
+            if let data = try? JSONEncoder().encode(chunks) {
                 try? data.write(to: self.chunksStorageURL, options: .atomic)
             }
-            if let metaData = try? JSONEncoder().encode(self.documentsMeta) {
+            if let metaData = try? JSONEncoder().encode(metadata) {
                 try? metaData.write(to: self.metaStorageURL, options: .atomic)
             }
         }

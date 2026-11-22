@@ -16,6 +16,10 @@ public struct MainView: View {
     @State private var showWardrobe: Bool = false
     @State private var showRAGManager: Bool = false
     @State private var showDebugLog: Bool = false
+    @State private var showMediaStudio = false
+    @State private var showPhoneControl = false
+    @State private var waitingForReply = false
+    @AppStorage("catUses3D") private var catUses3D = false
     
     @FocusState private var isInputFocused: Bool
     
@@ -55,9 +59,18 @@ public struct MainView: View {
                 // 6. Интерактивная 3D-сцена с котиком (скрывается при вводе текста, освобождая весь экран под чат)
                 if !isInputFocused {
                     ZStack(alignment: .bottom) {
-                        Cat3DSceneView()
-                            .frame(height: 220)
-                            .transition(.opacity.combined(with: .scale))
+                        Group {
+                            if catUses3D { Cat3DSceneView() }
+                            else {
+                                TimelineView(.periodic(from: .now, by: 30)) { context in
+                                    let snapshot = CatSnapshot.load().projected(at: context.date)
+                                    AnimatedCatView(scene: snapshot.action)
+                                        .onTapGesture { addCatResponse(tamagotchi.petCat()) }
+                                }
+                            }
+                        }
+                        .frame(height: 220)
+                        .transition(.opacity.combined(with: .scale))
                         
                         statusBadges
                     }
@@ -70,6 +83,7 @@ public struct MainView: View {
                 messagesScrollView
                 
                 // 9. Поле ввода и микрофон
+                if waitingForReply { ProgressView("Кот думает…").tint(.cyan) }
                 inputBar
             }
         }
@@ -83,6 +97,8 @@ public struct MainView: View {
         .sheet(isPresented: $showRAGManager) {
             RAGManagerView()
         }
+        .sheet(isPresented: $showPhoneControl) { PhoneControlView() }
+        .sheet(isPresented: $showMediaStudio) { MediaStudioView() }
         .sheet(isPresented: $showDebugLog) {
             DebugLogView()
         }
@@ -93,6 +109,7 @@ public struct MainView: View {
                 dismissButton: .default(Text("Понятно, сделаю!"))
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenMediaStudio"))) { _ in showMediaStudio = true }
         .onAppear {
             self.chatMessages = ChatStorage.shared.loadMessages()
         }
@@ -116,7 +133,7 @@ public struct MainView: View {
                     Text(catHandler.state.moodEmoji)
                         .font(.headline)
                 }
-                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B (GGUF Активна)" : "AiCat Офлайн ядро")
+                Text(modelManager.isModelLoaded ? "● Qwen 2.5 3B · файл найден" : "AiCat Офлайн ядро")
                     .font(.caption2)
                     .foregroundColor(modelManager.isModelLoaded ? .green : .cyan)
             }
@@ -137,7 +154,7 @@ public struct MainView: View {
             }
             
             // Гардероб
-            Button(action: { showWardrobe = true }) {
+            Button(action: { catUses3D = true; showWardrobe = true }) {
                 Image(systemName: "tshirt.fill")
                     .foregroundColor(.cyan)
                     .padding(7)
@@ -210,6 +227,9 @@ public struct MainView: View {
             
             Spacer()
             
+            Button(fitnessCoach.isPaused ? "Продолжить" : "Пауза") {
+                if fitnessCoach.isPaused { fitnessCoach.resume() } else { fitnessCoach.pause() }
+            }.font(.caption).foregroundColor(.cyan)
             Button("+1") {
                 fitnessCoach.manualRecordRep()
             }
@@ -270,6 +290,9 @@ public struct MainView: View {
             
             Spacer()
             
+            Button(yogaCoach.isPaused ? "Продолжить" : "Пауза") {
+                if yogaCoach.isPaused { yogaCoach.resume() } else { yogaCoach.pause() }
+            }.font(.caption).foregroundColor(.green)
             Button("Далее") {
                 yogaCoach.nextPose()
             }
@@ -369,6 +392,13 @@ public struct MainView: View {
     private var actionChipsBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                ActionChip(icon: "pawprint.fill", label: catUses3D ? "Картинки кота" : "3D-кот") { catUses3D.toggle() }
+                ActionChip(icon: "iphone", label: "Телефон") { showPhoneControl = true }
+                ActionChip(icon: "wind", label: "Дыхание") { addCatResponse(yogaCoach.startWorkout(type: "breathing")) }
+                ActionChip(icon: "figure.walk", label: "Разминка") { addCatResponse(yogaCoach.startWorkout(type: "mobility")) }
+                ActionChip(icon: "figure.core.training", label: "Планка") { addCatResponse(yogaCoach.startWorkout(type: "plank")) }
+                ActionChip(icon: "gamecontroller.fill", label: "Играть") { addCatResponse(tamagotchi.play()) }
+                ActionChip(icon: "camera.fill", label: "Фото и аудио") { showMediaStudio = true }
                 ActionChip(icon: "figure.mind.and.body", label: "Йога") {
                     let reply = yogaCoach.startWorkout()
                     addCatResponse(reply)
@@ -485,6 +515,9 @@ public struct MainView: View {
     // MARK: - Logic & AI Chat
     
     private func sendUserQuery(_ text: String) {
+        guard !waitingForReply else { return }
+        waitingForReply = true
+        LiveActivityManager.shared.update(status: "Думает над ответом", mood: "🤔", action: "Думает")
         let userMsg = ChatMessage(sender: .user, text: text)
         chatMessages.append(userMsg)
         ChatStorage.shared.saveMessages(chatMessages)
@@ -492,6 +525,8 @@ public struct MainView: View {
         Task {
             let (reply, image) = await LLMEngine.shared.generate(prompt: text)
             await MainActor.run {
+                self.waitingForReply = false
+                LiveActivityManager.shared.update(status: "Ответ готов", mood: "😼", action: "На связи")
                 self.addCatResponse(reply, image: image)
             }
         }
@@ -541,7 +576,7 @@ public struct MainView: View {
                     do {
                         try self.speechRecognizer.startListening()
                     } catch {
-                        print("Error starting recording: \(error)")
+                        speechRecognizer.errorMessage = error.localizedDescription
                     }
                 }
             }

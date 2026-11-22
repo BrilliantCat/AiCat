@@ -23,16 +23,18 @@ public final class GGUFReader {
         
         // 2. Version (UInt32 little endian)
         guard let versionData = try? handle.read(upToCount: 4), versionData.count == 4 else { return nil }
-        let version = versionData.withUnsafeBytes { $0.load(as: UInt32.self) }
+        let version = versionData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         
         // 3. Tensor count (UInt64)
         guard let tensorCountData = try? handle.read(upToCount: 8), tensorCountData.count == 8 else { return nil }
-        let tensorCount = tensorCountData.withUnsafeBytes { $0.load(as: UInt64.self) }
+        let tensorCount = tensorCountData.withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) }
         
         // 4. Metadata KV count (UInt64)
         guard let kvCountData = try? handle.read(upToCount: 8), kvCountData.count == 8 else { return nil }
-        let kvCount = kvCountData.withUnsafeBytes { $0.load(as: UInt64.self) }
+        let kvCount = kvCountData.withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) }
         
+        guard (2...3).contains(version), tensorCount > 0, kvCount > 0 else { return nil }
+
         // Читаем ключевые метаданные (архитектура, контекст)
         var architecture = "qwen2"
         var contextLength = 32768

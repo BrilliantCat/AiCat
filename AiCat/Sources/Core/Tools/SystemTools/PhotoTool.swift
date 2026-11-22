@@ -9,9 +9,18 @@ public final class PhotoTool {
     
     private init() {}
     
+    public func normalized(_ image: UIImage, size: CGSize? = nil) -> UIImage {
+        let target = size ?? image.size
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+    }
+
     // 1. Вырезание объекта / удаление фона (100% офлайн через Vision)
     public func removeBackground(from image: UIImage) -> UIImage? {
-        guard let cgImage = image.cgImage else { return nil }
+        guard let cgImage = normalized(image).cgImage else { return nil }
         
         if #available(iOS 17.0, *) {
             let request = VNGenerateForegroundInstanceMaskRequest()
@@ -59,7 +68,7 @@ public final class PhotoTool {
     
     // 3. Распознавание текста на фото (Офлайн OCR на русском и английском)
     public func recognizeText(from image: UIImage, completion: @escaping (String) -> Void) {
-        guard let cgImage = image.cgImage else {
+        guard let cgImage = normalized(image).cgImage else {
             completion("Не удалось прочитать картинку.")
             return
         }
@@ -79,7 +88,8 @@ public final class PhotoTool {
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         DispatchQueue.global(qos: .userInitiated).async {
-            try? handler.perform([request])
+            do { try handler.perform([request]) }
+            catch { completion("Ошибка распознавания: \(error.localizedDescription)") }
         }
     }
     

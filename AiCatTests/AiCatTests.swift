@@ -3,6 +3,63 @@ import XCTest
 
 final class AiCatTests: XCTestCase {
     
+    func testToolCallWithBracesInString() {
+        let input = #"{"tool":"create_note","parameters":{"title":"{кот}","content":"Он сказал \"мяу\""}}"#
+        let result = LLMEngine.shared.parseToolCall(from: input)
+        XCTAssertEqual(result?.parameters?["title"], "{кот}")
+        XCTAssertEqual(result?.parameters?["content"], "Он сказал \"мяу\"")
+    }
+
+    func testPetSnapshotProjection() {
+        var cat = CatSnapshot()
+        cat.date = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 12))!
+        cat.energy = 70
+        cat.sleeping = true
+        let later = cat.projected(at: cat.date.addingTimeInterval(3600))
+        XCTAssertEqual(later.satiety, 83)
+        XCTAssertEqual(later.energy, 85)
+        XCTAssertEqual(cat.energy, 70)
+    }
+
+    func testAutonomousCatSleepsWhenTired() {
+        var cat = CatSnapshot()
+        cat.date = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 12))!
+        cat.energy = 20
+        cat.actionUntil = .distantPast
+        let later = cat.projected(at: cat.date.addingTimeInterval(3600))
+        XCTAssertTrue(later.sleeping)
+        XCTAssertEqual(later.action, "sleep")
+        XCTAssertGreaterThan(later.energy, cat.energy)
+    }
+
+    func testAutonomousCatKeepsExplicitActionAndBounds() {
+        var cat = CatSnapshot()
+        cat.action = "eat"
+        cat.actionUntil = cat.date.addingTimeInterval(120)
+        XCTAssertEqual(cat.projected(at: cat.date.addingTimeInterval(60)).action, "eat")
+        let later = cat.projected(at: cat.date.addingTimeInterval(86400 * 60))
+        XCTAssertTrue((10...100).contains(later.energy))
+        XCTAssertTrue((10...100).contains(later.satiety))
+        XCTAssertTrue((15...100).contains(later.happiness))
+    }
+
+    @MainActor
+    func testLessonPauseAndAdvance() {
+        let coach = YogaCoachTool.shared
+        _ = coach.startWorkout(type: "breathing")
+        coach.pause()
+        let remaining = coach.remainingSeconds
+        XCTAssertTrue(coach.isPaused)
+        coach.nextPose()
+        XCTAssertTrue(coach.isPaused)
+        XCTAssertEqual(coach.currentExerciseIndex, 1)
+        XCTAssertGreaterThan(remaining, 0)
+        coach.resume()
+        XCTAssertFalse(coach.isPaused)
+        _ = coach.stopWorkout()
+        XCTAssertFalse(coach.isSessionActive)
+    }
+
     // 1. Тест парсера JSON вызова инструментов (с мусором вокруг JSON)
     func testToolCallJsonParsing() {
         let engine = LLMEngine.shared
@@ -89,7 +146,7 @@ final class AiCatTests: XCTestCase {
         let cal = Calendar.current
         let today = Date()
         let startToday = cal.startOfDay(for: today)
-        let laterToday = today.addingTimeInterval(3600)
+        let laterToday = startToday.addingTimeInterval(3600)
         XCTAssertEqual(cal.startOfDay(for: laterToday), startToday, "Даты в один день должны иметь одинаковый startOfDay")
     }
     

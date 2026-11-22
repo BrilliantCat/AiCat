@@ -1,5 +1,7 @@
+import Combine
 import Foundation
 import ActivityKit
+import WidgetKit
 
 public final class LiveActivityManager: ObservableObject {
     public static let shared = LiveActivityManager()
@@ -12,7 +14,15 @@ public final class LiveActivityManager: ObservableObject {
     public func startOrUpdateActivity(status: String = "AiCat на посту",
                                      mood: String = "😼",
                                      action: String = "Наблюдаю",
-                                     isHanging: Bool = false) {
+                                     isHanging: Bool = false,
+                                     recordAction: Bool = true) {
+        if recordAction {
+        var snapshot = CatSnapshot.load()
+        snapshot.action = CatSnapshot.scene(mood: mood)
+        snapshot.actionUntil = Date().addingTimeInterval(mood == "💤" ? 3600 : 120)
+        snapshot.save()
+        WidgetCenter.shared.reloadTimelines(ofKind: "AiCatHomeScreenWidget")
+        }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         
         let contentState = AiCatAttributes.ContentState(
@@ -33,7 +43,6 @@ public final class LiveActivityManager: ObservableObject {
         }
         
         // Закрываем старые зависшие активности перед стартом новой
-        endAllActivities()
         
         let attributes = AiCatAttributes(catName: "AiCat")
         do {

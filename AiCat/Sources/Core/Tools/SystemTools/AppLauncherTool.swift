@@ -26,21 +26,21 @@ public final class AppLauncherTool {
     ]
     
     @MainActor
-    public func openApp(named: String) -> String {
+    public func openApp(named: String) async -> String {
         let cleanName = named.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         
+        if ["camera", "камера"].contains(cleanName) {
+            return await PhoneControlTool.shared.execute(command: "camera")
+        }
+        if ["settings", "настройки"].contains(cleanName) {
+            return await PhoneControlTool.shared.execute(command: "settings")
+        }
         guard let scheme = appSchemes[cleanName] ?? appSchemes.first(where: { cleanName.contains($0.key) })?.value,
               let url = URL(string: scheme) else {
             return "Не смог найти приложение «\(named)». Возможно, у него нет системной URL-схемы."
         }
         
-        if UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            return "Открываю «\(named)»! Лечу как пуля 🚀"
-        } else {
-            // Попытка открыть напрямую
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            return "Запускаю «\(named)»..."
-        }
+        let opened = await UIApplication.shared.open(url, options: [:])
+        return opened ? "Открыл «\(named)»." : "iOS не смогла открыть «\(named)»."
     }
 }

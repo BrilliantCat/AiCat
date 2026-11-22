@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 public enum CatActionType: String, Codable {
@@ -41,6 +42,14 @@ public final class CatActionHandler: ObservableObject {
     private init() {}
     
     public func execute(action: String, item: String? = nil) -> String {
+        switch action {
+        case "play": return TamagotchiManager.shared.play()
+        case "feed": return TamagotchiManager.shared.feedFish()
+        case "pet": return TamagotchiManager.shared.petCat()
+        case "sleep": return TamagotchiManager.shared.sleep()
+        case "wake": return TamagotchiManager.shared.wake()
+        default: break
+        }
         guard let actionType = CatActionType(rawValue: action) else {
             return "Кот с недоумением посмотрел на тебя: 'Такую команду я пока не выучил'."
         }
@@ -131,15 +140,6 @@ public final class CatActionHandler: ObservableObject {
     
     // Интерактивное поглаживание кота по тапу
     public func pet() -> String {
-        let replies = [
-            "*Мурлычет на низких частотах и трется головой о палец*. Приятно, кожаный!",
-            "*Довольно прищурил глаза за темными очками*. Вот это сервис, продолжай!",
-            "*Выгнул спинку дугой и заурчал*. Обожаю, когда ты меня гладишь!"
-        ]
-        state.moodEmoji = "😻"
-        state.statusText = "Мурчит от удовольствия"
-        state.executionToken = UUID().uuidString
-        LiveActivityManager.shared.update(status: state.statusText, mood: state.moodEmoji, action: "Мурчит")
-        return replies.randomElement()!
+        return TamagotchiManager.shared.petCat()
     }
 }

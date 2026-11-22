@@ -9,18 +9,21 @@ let package = Package(
     products: [
         .library(
             name: "AiCatCore",
-            targets: ["AiCatCore"]
+            targets: [
+        .binaryTarget(name: "llama", path: "Frameworks/llama.xcframework"),"AiCatCore"]
         )
     ],
     dependencies: [
         // Движок инференса локальных GGUF-моделей под Apple Metal / A17 Pro
-        .package(url: "https://github.com/ggerganov/llama.cpp", branch: "master")
+        .package(url: "https://github.com/apple/ml-stable-diffusion", exact: "1.1.1")
     ],
     targets: [
+        .binaryTarget(name: "llama", path: "Frameworks/llama.xcframework"),
         .target(
             name: "AiCatCore",
             dependencies: [
-                .product(name: "llama", package: "llama.cpp")
+                "llama",
+                .product(name: "StableDiffusion", package: "ml-stable-diffusion")
             ],
             path: "AiCat/Sources"
         )

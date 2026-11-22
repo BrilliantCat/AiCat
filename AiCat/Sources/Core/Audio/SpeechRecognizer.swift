@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Speech
 import AVFoundation
@@ -49,6 +50,10 @@ public final class OfflineSpeechRecognizer: ObservableObject {
             throw NSError(domain: "AiCat", code: 1, userInfo: [NSLocalizedDescriptionKey: err])
         }
         
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw NSError(domain: "AiCat", code: 2, userInfo: [NSLocalizedDescriptionKey: "Русское офлайн-распознавание речи недоступно на этом устройстве."])
+        }
+        CatSpeechSynthesizer.shared.stop()
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
@@ -58,6 +63,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         
         // Включаем частичные результаты в реальном времени
         request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = true
         
         let inputNode = audioEngine.inputNode
         let busFormat = inputNode.outputFormat(forBus: 0)

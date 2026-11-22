@@ -17,6 +17,18 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Install pinned llama.cpp framework
+        run: |
+          mkdir -p Frameworks
+          curl --fail --location --retry 3 https://github.com/ggml-org/llama.cpp/releases/download/b5046/llama-b5046-xcframework.zip -o /tmp/llama.zip
+          unzip -q /tmp/llama.zip -d Frameworks
+          if [ ! -d Frameworks/llama.xcframework ]; then
+            framework=$(find Frameworks -type d -name llama.xcframework -print -quit)
+            test -n "$framework"
+            mv "$framework" Frameworks/llama.xcframework
+          fi
+          test -d Frameworks/llama.xcframework
+
       - name: Generate Xcode Project
         run: xcodegen generate
 
@@ -38,6 +50,14 @@ jobs:
               exit 65
             }
 
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          simulator=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
+          xcodebuild -project AiCat.xcodeproj -scheme AiCat -configuration Debug \
+            -destination "platform=iOS Simulator,id=$simulator" \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee tests.log
+
       - name: Build Xcode Archive
         run: |
           set -o pipefail
@@ -48,7 +68,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_ENTITLEMENTS="" 2>&1 | tee xcode_build.log || {
+            2>&1 | tee xcode_build.log || {
               echo "=== ARCHIVE FAILED ==="
               grep -C 2 -E "(error: |BUILD FAILED)" xcode_build.log || true
               grep -E "error: " xcode_build.log | head -n 5 | while IFS= read -r line; do

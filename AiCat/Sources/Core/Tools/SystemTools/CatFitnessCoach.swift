@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 import CoreMotion
@@ -12,6 +13,8 @@ public final class CatFitnessCoach: ObservableObject {
     @Published public var targetReps: Int = 15
     @Published public var catCheerMessage: String = ""
     
+    @Published public private(set) var isPaused = false
+    private var workoutType = "pushups"
     private let motionManager = CMMotionManager()
     private var lastRepTime: TimeInterval = 0
     private var isSquattingDown: Bool = false
@@ -19,12 +22,17 @@ public final class CatFitnessCoach: ObservableObject {
     private init() {}
     
     // Запуск режима подсчета отжиманий (через датчик приближения Dynamic Island)
-    public func startPushups() -> String {
+    public func startPushups(reps: Int = 15) -> String {
+        _ = YogaCoachTool.shared.stopWorkout()
+        stopWorkout()
+        workoutType = "pushups"
+        isPaused = false
+        lastRepTime = 0
         isWorkoutActive = true
         currentExerciseName = "Отжимания хищника"
         currentRepsCount = 0
-        targetReps = 15
-        catCheerMessage = "Положи телефон экраном вверх под грудь! Опускайся к экрану — я считаю."
+        targetReps = min(100, max(1, reps))
+        catCheerMessage = "Датчик считает приближения. Для ручного счёта нажимай +1."
         
         UIDevice.current.isProximityMonitoringEnabled = true
         NotificationCenter.default.removeObserver(self, name: UIDevice.proximityStateDidChangeNotification, object: nil)
@@ -35,15 +43,19 @@ public final class CatFitnessCoach: ObservableObject {
         
         _ = MusicTool.shared.generateBeat(style: "cyberpunk")
         
-        return "Положи iPhone под грудь экраном вверх! Начинай отжиматься — я вслух считаю каждое чистое повторение. Цель: 15 раз. Погнали!"
+        return "Положи iPhone под грудь экраном вверх! Начинай отжиматься — я считаю приближения к датчику. Цель: \(targetReps) раз. Погнали!"
     }
     
     // Запуск приседаний (с отслеживанием 3D-вектора ускорения)
-    public func startSquats() -> String {
+    public func startSquats(reps: Int = 20) -> String {
+        _ = YogaCoachTool.shared.stopWorkout()
+        stopWorkout()
+        workoutType = "squats"
+        isPaused = false
         isWorkoutActive = true
         currentExerciseName = "Приседания пантеры"
         currentRepsCount = 0
-        targetReps = 20
+        targetReps = min(100, max(1, reps))
         catCheerMessage = "Держи телефон в руке или в кармане. Приседай глубоко!"
         
         UIDevice.current.isProximityMonitoringEnabled = false
@@ -54,17 +66,17 @@ public final class CatFitnessCoach: ObservableObject {
         
         _ = MusicTool.shared.generateBeat(style: "lo-fi")
         
-        return "Держи телефон в руке или в кармане. Начинай глубокие приседания — я фиксирую каждое движение!"
+        return "Держи телефон в руке или в кармане. Начинай глубокие приседания — я оцениваю повторения по движению телефона. При необходимости используй +1."
     }
     
     // Ручной тап по баннеру тренировки (для проверки или если датчик недоступен)
     public func manualRecordRep() {
-        guard isWorkoutActive else { return }
+        guard isWorkoutActive, !isPaused else { return }
         recordRep()
     }
     
     @objc private func handleProximityChange() {
-        guard isWorkoutActive else { return }
+        guard isWorkoutActive, !isPaused else { return }
         
         if UIDevice.current.proximityState {
             let now = Date().timeIntervalSince1970
@@ -76,12 +88,14 @@ public final class CatFitnessCoach: ObservableObject {
     
     private func recordRep() {
         currentRepsCount += 1
+        LiveActivityManager.shared.update(status: "\(currentRepsCount)/\(targetReps)", mood: "💪", action: currentExerciseName)
         CatActionHandler.shared.state.statusText = "\(currentExerciseName): \(currentRepsCount)/\(targetReps)"
         
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()
         
         if currentRepsCount >= targetReps {
+            UserDefaults.standard.set(UserDefaults.standard.integer(forKey: "aicat.completedWorkouts") + 1, forKey: "aicat.completedWorkouts")
             catCheerMessage = "Молодец! Отличный результат!"
             CatSpeechSynthesizer.shared.speak(text: "Цель выполнена! \(targetReps) раз! Ты настоящий тигр, кожаный!")
             stopWorkout()
@@ -99,7 +113,7 @@ public final class CatFitnessCoach: ObservableObject {
         lastRepTime = 0
         
         motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-            guard let self = self, self.isWorkoutActive, let acc = data?.acceleration else { return }
+            guard let self = self, self.isWorkoutActive, !self.isPaused, let acc = data?.acceleration else { return }
             
             // Расчет 3D магнитуды вектора ускорения: sqrt(x^2 + y^2 + z^2)
             // В покое = 1.0g. При опускании тела ускорение проседает < 0.85g.
@@ -117,8 +131,28 @@ public final class CatFitnessCoach: ObservableObject {
         }
     }
     
+    public func pause() {
+        guard isWorkoutActive, !isPaused else { return }
+        isPaused = true
+        motionManager.stopAccelerometerUpdates()
+        UIDevice.current.isProximityMonitoringEnabled = false
+        catCheerMessage = "Пауза"
+        LiveActivityManager.shared.update(status: currentExerciseName, mood: "💪", action: "Пауза")
+    }
+
+    public func resume() {
+        guard isWorkoutActive, isPaused else { return }
+        isPaused = false
+        lastRepTime = 0
+        isSquattingDown = false
+        if workoutType == "squats" { startMotionTracking() }
+        else { UIDevice.current.isProximityMonitoringEnabled = true }
+        catCheerMessage = "Продолжаем"
+    }
+
     public func stopWorkout() {
         isWorkoutActive = false
+        isPaused = false
         UIDevice.current.isProximityMonitoringEnabled = false
         NotificationCenter.default.removeObserver(self, name: UIDevice.proximityStateDidChangeNotification, object: nil)
         motionManager.stopAccelerometerUpdates()
