@@ -146,7 +146,7 @@ final class AiCatTests: XCTestCase {
             let scene = SCNScene()
             XCTAssertTrue(CatRoomScenery.install(in: scene, hour: hour))
             let room = try XCTUnwrap(scene.rootNode.childNode(withName: "SittingRoom", recursively: false))
-            XCTAssertEqual(room.geometry?.geometryElementCount, 6)
+            XCTAssertEqual(room.geometry?.elementCount, 6)
         }
     }
     
