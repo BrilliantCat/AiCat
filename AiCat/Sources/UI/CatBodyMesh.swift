@@ -72,11 +72,20 @@ enum CatBodyMesh {
                      SCNGeometryElement(data: data.subdata(in: split..<data.count), primitiveType: .triangles,
                                         primitiveCount: model.triangles - coatFaces, bytesPerIndex: 4)]
         // Float colors have the same normalized values in SceneKit and the desktop reviewer.
+        // SCNSkinner expects non-interleaved bone weight/index buffers matching vertex count.
         var colors = [Float]()
         colors.reserveCapacity(model.vertices * 4)
+        var boneIndices = Data()
+        boneIndices.reserveCapacity(model.vertices * 4)
+        var boneWeights = Data()
+        boneWeights.reserveCapacity(model.vertices * 16)
         data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            guard let base = bytes.baseAddress else { return }
             for i in 0..<model.vertices {
-                for channel in 0..<4 { colors.append(Float(bytes[i * stride + 24 + channel]) / 255) }
+                let vertex = i * stride
+                for channel in 0..<4 { colors.append(Float(bytes[vertex + 24 + channel]) / 255) }
+                boneIndices.append((base + vertex + 28).assumingMemoryBound(to: UInt8.self), count: 4)
+                boneWeights.append((base + vertex + 32).assumingMemoryBound(to: UInt8.self), count: 16)
             }
         }
         let color = SCNGeometrySource(data: colors.withUnsafeBufferPointer { Data(buffer: $0) }, semantic: .color,
@@ -95,7 +104,12 @@ enum CatBodyMesh {
         coat.diffuse.wrapS = .repeat
         coat.diffuse.wrapT = .repeat
         geometry.materials = [coat, details]
-        return Asset(description: model, geometry: geometry, weights: source(.boneWeights, 32, 4),
-                     indices: source(.boneIndices, 28, 4, bytes: 1))
+        let weights = SCNGeometrySource(data: boneWeights, semantic: .boneWeights, vectorCount: model.vertices,
+                                        usesFloatComponents: true, componentsPerVector: 4, bytesPerComponent: 4,
+                                        dataOffset: 0, dataStride: 16)
+        let indices = SCNGeometrySource(data: boneIndices, semantic: .boneIndices, vectorCount: model.vertices,
+                                        usesFloatComponents: false, componentsPerVector: 4, bytesPerComponent: 1,
+                                        dataOffset: 0, dataStride: 4)
+        return Asset(description: model, geometry: geometry, weights: weights, indices: indices)
     }
 }
