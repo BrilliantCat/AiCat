@@ -25,7 +25,7 @@ public final class ToolRegistry {
         ToolDefinition(
             name: "cat_action",
             description: "Управление физическими действиями кота (трюки, анимации, гардероб)",
-            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "название одежды при dress_up"],
+            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "кепка, берет, черные или янтарные очки, кулон, бабочка, худи, жилетка. take_off без item снимает всё."],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -209,7 +209,7 @@ public final class ToolRegistry {
             
         case "play_music":
             let style = parameters["style"] ?? "lo-fi"
-            let res = await MainActor.run { MusicTool.shared.generateBeat(style: style) }
+            let res = await MusicTool.shared.generateBeat(style: style)
             return (true, res, nil)
             
         case "start_workout":

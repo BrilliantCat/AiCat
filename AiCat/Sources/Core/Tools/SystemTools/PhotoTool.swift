@@ -14,7 +14,10 @@ public final class PhotoTool {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         return UIGraphicsImageRenderer(size: target, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
+            let scale = max(target.width / image.size.width, target.height / image.size.height)
+            let scaled = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: CGRect(x: (target.width-scaled.width)/2, y: (target.height-scaled.height)/2,
+                                  width: scaled.width, height: scaled.height))
         }
     }
 

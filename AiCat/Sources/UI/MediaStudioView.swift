@@ -6,6 +6,7 @@ import AVFoundation
 
 struct MediaStudioView: View {
     @StateObject private var audio = AudioFileTool()
+    @ObservedObject private var music = MusicTool.shared
     @State private var photoItem: PhotosPickerItem?
     @State private var picture: UIImage?
     @State private var camera = false
@@ -52,7 +53,8 @@ struct MediaStudioView: View {
                                     status = "Введи описание и установи Stable Diffusion с VAEEncoder.mlmodelc."
                                     return
                                 }
-                                do { self.picture = try await LocalInference.shared.image(url: url, prompt: text, startingImage: source) }
+                                do { self.picture = try await LocalInference.shared.image(url: url, prompt: text, startingImage: source,
+                                                                                        textModel: ModelManager.shared.activeModelURL) }
                                 catch { status = error.localizedDescription }
                             }
                         }
@@ -71,7 +73,7 @@ struct MediaStudioView: View {
                     Button("Нарисовать по описанию") {
                         run {
                             let result = await ImageGenerationTool.shared.generateImageAsync(prompt: text)
-                            picture = result.image
+                            if let image = result.image { picture = image }
                             status = result.status
                         }
                     }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -82,8 +84,18 @@ struct MediaStudioView: View {
                         }
                     }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Создать и включить Lo-Fi бит") {
-                        status = MusicTool.shared.generateBeat(style: "lo-fi")
-                        output = MusicTool.shared.lastExportURL
+                        run {
+                            status = await music.generateBeat(style: "lo-fi")
+                            output = music.lastExportURL
+                        }
+                    }
+                    if let output, output == music.lastExportURL {
+                        Button(music.isPlaying ? "Остановить бит" : "Послушать ещё раз") {
+                            if music.isPlaying { music.stopPlayback() }
+                            else {
+                                do { try music.replay() } catch { status = error.localizedDescription }
+                            }
+                        }
                     }
                 }
                 Section("Обрезка аудио") {

@@ -7,13 +7,7 @@ final class AudioFileTool: ObservableObject {
 
     func exportSpeech(_ text: String) async throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("AiCat-\(UUID()).caf")
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix("ru") && $0.gender == .male }
-            .sorted { $0.quality.rawValue > $1.quality.rawValue }.first
-            ?? AVSpeechSynthesisVoice(language: "ru-RU")
-        utterance.rate = 0.46
-        utterance.pitchMultiplier = 0.95
+        let utterance = CatSpeechSynthesizer.shared.utterance(for: text)
         return try await withCheckedThrowingContinuation { continuation in
             let lock = NSLock()
             var finished = false
@@ -25,8 +19,13 @@ final class AudioFileTool: ObservableObject {
                 do {
                     if pcm.frameLength == 0 {
                         finished = true
+                        let hasAudio = (writer?.length ?? 0) > 0
                         writer = nil
-                        continuation.resume(returning: url)
+                        if hasAudio { continuation.resume(returning: url) }
+                        else {
+                            continuation.resume(throwing: NSError(domain: "AiCat.Audio", code: 4,
+                                userInfo: [NSLocalizedDescriptionKey: "Выбранный голос не вернул звук. Выбери другой голос в меню AiCat."]))
+                        }
                         return
                     }
                     if writer == nil {

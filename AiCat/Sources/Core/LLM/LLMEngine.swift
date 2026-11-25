@@ -50,13 +50,16 @@ public final class LLMEngine: ObservableObject {
         let actionWords = ["напомни", "создай", "запиши", "открой", "включи", "выключи", "нарисуй",
                            "сгенерируй", "переведи", "покорми", "погладь", "поигра", "одень", "переодень",
                            "покажи", "найди", "запусти", "начни", "календар", "напоминани", "статус"]
-        let includeTools = actionWords.contains { userPrompt.lowercased().contains($0) }
+        let includeTools = !PromptBuilder.wordGameInvitation(userPrompt) && actionWords.contains { userPrompt.lowercased().contains($0) }
         let systemPrompt = PromptBuilder.buildSystemPrompt(ragContext: ragContext, includeTools: includeTools)
         let moodPrompt = await MainActor.run { TamagotchiManager.shared.moodContextPrompt() }
         let history = ChatStorage.shared.loadMessages().dropLast().suffix(12).map {
             (role: $0.sender == .user ? "user" : "assistant", content: String($0.text.prefix(1000)))
         }
-        let fullSystem = systemPrompt + "\n" + moodPrompt
+        var fullSystem = systemPrompt + "\n" + moodPrompt
+        if let city = PromptBuilder.placeNameHint(userPrompt) {
+            fullSystem += "\nСобеседник, вероятно, имеет в виду город \(city). Учитывай предыдущую реплику."
+        }
         let rawModelOutput = await ModelManager.shared.infer(prompt: userPrompt, system: fullSystem, history: history)
 
         // Парсинг JSON-вызова инструмента
@@ -78,6 +81,17 @@ public final class LLMEngine: ObservableObject {
         
         func hasWord(_ target: String) -> Bool { wordSet.contains(target) }
         func hasAnyWord(_ targets: [String]) -> Bool { !wordSet.isDisjoint(with: targets) }
+
+        if PromptBuilder.wordGameInvitation(userPrompt) {
+            return (hasWord("города") ? "Давай! Начну с Омска. Тебе город на «к»." : "Давай по последней букве! Моё слово — клубок. Тебе на «к».", nil)
+        }
+        if let city = PromptBuilder.placeNameHint(userPrompt) {
+            let game = ChatStorage.shared.loadMessages().dropLast().suffix(2).contains {
+                $0.sender == .user && PromptBuilder.wordGameInvitation($0.text)
+            }
+            if game { return ("Думаю, ты про \(city). Давай от неё: мой город — Астрахань. Тебе на «н».", nil) }
+            return ("Ты про \(city)? Что хочешь о ней узнать?", nil)
+        }
         
         // 1. САМОЧУВСТВИЕ И РАЗГОВОР ПО ДУШАМ
         if lower.contains("как дела") || lower.contains("как жизнь") || lower.contains("как настроение") || lower.contains("как ты") {

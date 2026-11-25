@@ -26,6 +26,15 @@ targets:
     sources:
       - path: AiCat/Sources
       - path: Assets/Assets.xcassets
+      - path: Assets/CatModel
+        type: folder
+        buildPhase: resources
+      - path: Assets/Speech
+        type: folder
+        buildPhase: resources
+      - path: Assets/LivingRoom
+        type: folder
+        buildPhase: resources
       - path: AiCat-Visuals
         type: folder
         buildPhase: resources
@@ -33,6 +42,9 @@ targets:
         type: folder
         buildPhase: resources
     dependencies:
+      - framework: Frameworks/whisper.xcframework
+        embed: true
+        codeSign: false
       - framework: Frameworks/llama.xcframework
         embed: true
         codeSign: false
@@ -66,7 +78,7 @@ targets:
         NSRemindersFullAccessUsageDescription: "AiCat создает и читает напоминания для организации твоего расписания."
         NSCalendarsUsageDescription: "AiCat управляет календарем."
         NSCalendarsFullAccessUsageDescription: "AiCat планирует события в твоем календаре."
-        NSCameraUsageDescription: "AiCat использует камеру для анализа фото."
+        NSCameraUsageDescription: "AiCat использует камеру для фото и, по твоему выбору, для подсчёта отжиманий. При тренировке расстояние до лица обрабатывается на iPhone. Кадры и данные лица не сохраняются и не отправляются."
         NSPhotoLibraryUsageDescription: "AiCat редактирует фото по твоим командам."
         NSPhotoLibraryAddUsageDescription: "AiCat сохраняет созданные изображения в медиатеку Фото."
         CFBundleURLTypes:
@@ -79,6 +91,7 @@ targets:
         INFOPLIST_FILE: "AiCat/Info.plist"
         PRODUCT_BUNDLE_IDENTIFIER: com.brilliantcat.aicat
         PRODUCT_NAME: AiCat
+        SWIFT_OBJC_BRIDGING_HEADER: AiCat/Sources/Core/Audio/LocalTranscription.h
         EXECUTABLE_NAME: AiCat
         SKIP_INSTALL: "NO"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

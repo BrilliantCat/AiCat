@@ -14,12 +14,52 @@ public final class CatFitnessCoach: ObservableObject {
     @Published public var catCheerMessage: String = ""
     
     @Published public private(set) var isPaused = false
+    @Published private(set) var usingCamera = false
+    var isPushupWorkout: Bool { isWorkoutActive && workoutType == "pushups" }
+    private let camera = PushupCamera()
+    private var nearSince: TimeInterval?
+    private var workoutMusic: Task<Void, Never>?
     private var workoutType = "pushups"
     private let motionManager = CMMotionManager()
     private var lastRepTime: TimeInterval = 0
     private var isSquattingDown: Bool = false
     
-    private init() {}
+    private init() {
+        camera.onStatus = { [weak self] in self?.catCheerMessage = $0 }
+        camera.onRep = { [weak self] in
+            guard let self, self.isPushupWorkout, self.usingCamera, !self.isPaused else { return }
+            self.recordRep()
+        }
+        camera.onUnavailable = { [weak self] in
+            guard let self else { return }
+            self.useProximity()
+            self.catCheerMessage = "Камера недоступна. " + self.catCheerMessage
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(backgrounded),
+                                               name: UIApplication.didEnterBackgroundNotification, object: nil)
+    }
+
+    @objc private func backgrounded() { if isWorkoutActive { pause() } }
+
+    func toggleCamera() {
+        guard isPushupWorkout, !isPaused else { return }
+        if usingCamera { useProximity(); return }
+        usingCamera = true
+        nearSince = nil
+        UIDevice.current.isProximityMonitoringEnabled = false
+        catCheerMessage = "Для счёта положи iPhone экраном вверх под лицом."
+        camera.start()
+    }
+
+    private func useProximity() {
+        camera.stop()
+        usingCamera = false
+        nearSince = nil
+        UIDevice.current.isProximityMonitoringEnabled = true
+        catCheerMessage = UIDevice.current.isProximityMonitoringEnabled
+            ? "Опустись к верхнему краю экрана, затем поднимись. Можно выбрать камеру или +1."
+            : "Для автоматического счёта выбери камеру. Вручную — кнопкой +1."
+    }
     
     // Запуск режима подсчета отжиманий (через датчик приближения Dynamic Island)
     public func startPushups(reps: Int = 15) -> String {
@@ -32,18 +72,16 @@ public final class CatFitnessCoach: ObservableObject {
         currentExerciseName = "Отжимания хищника"
         currentRepsCount = 0
         targetReps = min(100, max(1, reps))
-        catCheerMessage = "Датчик считает приближения. Для ручного счёта нажимай +1."
-        
-        UIDevice.current.isProximityMonitoringEnabled = true
         NotificationCenter.default.removeObserver(self, name: UIDevice.proximityStateDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleProximityChange), name: UIDevice.proximityStateDidChangeNotification, object: nil)
+        useProximity()
         
         CatActionHandler.shared.state.moodEmoji = "💪"
         CatActionHandler.shared.state.statusText = "Считает отжимания: 0/\(targetReps)"
         
-        _ = MusicTool.shared.generateBeat(style: "cyberpunk")
+        workoutMusic = Task { _ = await MusicTool.shared.generateBeat(style: "cyberpunk", forWorkout: true) }
         
-        return "Положи iPhone под грудь экраном вверх! Начинай отжиматься — я считаю приближения к датчику. Цель: \(targetReps) раз. Погнали!"
+        return "Цель — \(targetReps) отжиманий. Положи iPhone экраном вверх под лицом. \(catCheerMessage)"
     }
     
     // Запуск приседаний (с отслеживанием 3D-вектора ускорения)
@@ -64,7 +102,7 @@ public final class CatFitnessCoach: ObservableObject {
         CatActionHandler.shared.state.moodEmoji = "🐆"
         CatActionHandler.shared.state.statusText = "Считает приседания: 0/\(targetReps)"
         
-        _ = MusicTool.shared.generateBeat(style: "lo-fi")
+        workoutMusic = Task { _ = await MusicTool.shared.generateBeat(style: "lo-fi", forWorkout: true) }
         
         return "Держи телефон в руке или в кармане. Начинай глубокие приседания — я оцениваю повторения по движению телефона. При необходимости используй +1."
     }
@@ -72,15 +110,19 @@ public final class CatFitnessCoach: ObservableObject {
     // Ручной тап по баннеру тренировки (для проверки или если датчик недоступен)
     public func manualRecordRep() {
         guard isWorkoutActive, !isPaused else { return }
+        nearSince = nil
+        if usingCamera { camera.resetCountCycle() }
         recordRep()
     }
     
     @objc private func handleProximityChange() {
-        guard isWorkoutActive, !isPaused else { return }
-        
+        guard isPushupWorkout, !isPaused, !usingCamera, UIDevice.current.isProximityMonitoringEnabled else { return }
+        let now = ProcessInfo.processInfo.systemUptime
         if UIDevice.current.proximityState {
-            let now = Date().timeIntervalSince1970
-            guard now - lastRepTime > 0.65 else { return }
+            if nearSince == nil { nearSince = now }
+        } else if let start = nearSince {
+            nearSince = nil
+            guard now - start >= 0.10, now - lastRepTime >= 0.55 else { return }
             lastRepTime = now
             recordRep()
         }
@@ -113,7 +155,8 @@ public final class CatFitnessCoach: ObservableObject {
         lastRepTime = 0
         
         motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-            guard let self = self, self.isWorkoutActive, !self.isPaused, let acc = data?.acceleration else { return }
+            guard let self = self, self.isWorkoutActive, self.workoutType == "squats",
+                  !self.isPaused, let acc = data?.acceleration else { return }
             
             // Расчет 3D магнитуды вектора ускорения: sqrt(x^2 + y^2 + z^2)
             // В покое = 1.0g. При опускании тела ускорение проседает < 0.85g.
@@ -134,6 +177,10 @@ public final class CatFitnessCoach: ObservableObject {
     public func pause() {
         guard isWorkoutActive, !isPaused else { return }
         isPaused = true
+        workoutMusic?.cancel()
+        MusicTool.shared.cancelBeat(workoutOnly: true)
+        camera.stop()
+        nearSince = nil
         motionManager.stopAccelerometerUpdates()
         UIDevice.current.isProximityMonitoringEnabled = false
         catCheerMessage = "Пауза"
@@ -145,14 +192,21 @@ public final class CatFitnessCoach: ObservableObject {
         isPaused = false
         lastRepTime = 0
         isSquattingDown = false
-        if workoutType == "squats" { startMotionTracking() }
-        else { UIDevice.current.isProximityMonitoringEnabled = true }
         catCheerMessage = "Продолжаем"
+        if workoutType == "squats" { startMotionTracking() }
+        else if usingCamera { camera.start() }
+        else { useProximity() }
     }
 
     public func stopWorkout() {
+        workoutMusic?.cancel()
+        MusicTool.shared.cancelBeat(workoutOnly: true)
+        workoutMusic = nil
         isWorkoutActive = false
         isPaused = false
+        camera.stop()
+        usingCamera = false
+        nearSince = nil
         UIDevice.current.isProximityMonitoringEnabled = false
         NotificationCenter.default.removeObserver(self, name: UIDevice.proximityStateDidChangeNotification, object: nil)
         motionManager.stopAccelerometerUpdates()

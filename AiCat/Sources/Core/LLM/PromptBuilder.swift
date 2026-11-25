@@ -1,6 +1,19 @@
 import Foundation
 
 public struct PromptBuilder {
+    static func wordGameInvitation(_ text: String) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard !words.contains("не"), words.contains(where: { ["играть", "играем", "поиграем", "поиграй", "сыграем", "сыграй", "игру"].contains($0) }) else { return false }
+        return zip(words, words.dropFirst()).contains { pair in
+            pair.0 == "в" && ["слова", "города"].contains(pair.1)
+        }
+    }
+
+    static func placeNameHint(_ text: String) -> String? {
+        let compact = text.lowercased().filter { !$0.isWhitespace && !"-‑–—.!?".contains($0) }
+        return ["йошкорола", "йошкарола"].contains(compact) ? "Йошкар-Ола" : nil
+    }
+
     public static func buildSystemPrompt(ragContext: String = "", includeTools: Bool = true) -> String {
         let now = Date()
         let df = DateFormatter()
@@ -16,6 +29,7 @@ public struct PromptBuilder {
         Иногда ласково называй его «кожаный», но не в каждом ответе. Шутки редкие и добрые.
         Сначала откликнись на конкретные слова человека. При усталости поддержи, при радости раздели её.
         На простой вопрос отвечай понятным языком, обычно в 1–4 предложениях. Подробности раскрывай по просьбе.
+        В словесной игре помни предыдущий ход, следуй согласованным правилам и предложи свой ход. Если не узнаёшь слово или город, переспроси.
         Не начинай ответ с определения из энциклопедии, если человек просто делится мыслью.
         Пример: «День какой-то тяжёлый» → «Вымотался? Можем просто поболтать. Что больше всего достало сегодня?»
         Пример: «Зачем нужна лампочка?» → «Чтобы вечером не искать всё на ощупь, кожаный. Она превращает электричество в свет.»

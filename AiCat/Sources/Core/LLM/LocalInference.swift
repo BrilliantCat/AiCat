@@ -79,16 +79,25 @@ actor LocalInference {
         return String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func image(url: URL, prompt: String, startingImage: CGImage? = nil) throws -> UIImage {
+    func image(url: URL, prompt: String, startingImage: CGImage? = nil, textModel: URL? = nil) throws -> UIImage {
+        var conditioning = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !conditioning.isEmpty else { throw failure("Введи описание изображения.") }
+        if let textModel, conditioning.range(of: "[А-Яа-яЁё]", options: .regularExpression) != nil {
+            let translated = try reply(url: textModel, prompt: conditioning, system:
+                "Translate the visual description into concise English for an image generator. Preserve subjects, colors, style and spatial relations. Output only the description.")
+            if !translated.isEmpty { conditioning = translated }
+        }
         let modelConfiguration = MLModelConfiguration()
         modelConfiguration.computeUnits = .cpuAndNeuralEngine
         let pipeline = try StableDiffusionPipeline(resourcesAt: url, controlNet: [], configuration: modelConfiguration,
                                                    disableSafety: false, reduceMemory: true)
         defer { pipeline.unloadResources() }
-        var configuration = StableDiffusionPipeline.Configuration(prompt: prompt)
+        var configuration = StableDiffusionPipeline.Configuration(prompt: conditioning)
         configuration.startingImage = startingImage
-        configuration.strength = 0.6
-        configuration.stepCount = 20
+        configuration.strength = startingImage == nil ? 1 : 0.55
+        configuration.stepCount = 28
+        configuration.schedulerType = .dpmppScheduler
+        configuration.negativePrompt = "compression artifacts, duplicate limbs, malformed anatomy"
         configuration.seed = UInt32.random(in: 0..<UInt32.max)
         let images = try pipeline.generateImages(configuration: configuration)
         guard let image = images.compactMap({ $0 }).first else {

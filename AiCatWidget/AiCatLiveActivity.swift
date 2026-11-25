@@ -14,39 +14,10 @@ struct AiCatLiveActivity: Widget {
     }
     
     public var body: some WidgetConfiguration {
-        ActivityConfiguration(for: AiCatAttributes.self) { context in
-            let mood = context.isStale ? "😼" : context.state.moodEmoji
-            // Экран блокировки (Lock Screen Banner)
-            HStack(spacing: 14) {
-                CatPicture(scene: CatSnapshot.scene(mood: mood), outfit: context.state.outfit)
-                    .frame(width: 64, height: 64)
-                    .padding(8)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text("AiCat")
-                            .font(.headline)
-                            .bold()
-                            .foregroundColor(.white)
-                        Text("•")
-                            .foregroundColor(.gray)
-                        Text(context.isStale ? "В комнате" : context.state.currentAction)
-                            .font(.subheadline)
-                            .foregroundColor(.cyan)
-                    }
-                    Text(context.isStale ? "Загляни к коту" : context.state.statusMessage)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .widgetURL(URL(string: "aicat://chat"))
-            .activityBackgroundTint(Color(red: 0.08, green: 0.09, blue: 0.12).opacity(0.95))
-            
+        ActivityConfiguration(for: AiCatAttributes.self) { _ in
+            Color.clear
+                .frame(height: 1)
+                .activityBackgroundTint(.clear)
         } dynamicIsland: { context in
             let mood = context.isStale ? "😼" : context.state.moodEmoji
             return DynamicIsland {

@@ -57,6 +57,10 @@ public final class CatActionHandler: ObservableObject {
             state = restored
         }
     }
+
+    var wornGarments: [CatGarment] {
+        state.isDressed ? CatGarment.matching(state.currentOutfit) : []
+    }
     
     public func execute(action: String, item: String? = nil) -> String {
         switch action {
@@ -111,23 +115,17 @@ public final class CatActionHandler: ObservableObject {
             response = "*Поймал виртуальный лазерный луч лапой*. Ладно, признаю, это было весело!"
             
         case .dressUp:
-            let outfit = item ?? "Стильный черный худи и темные очки"
-            state.isDressed = true
-            state.currentOutfit = outfit
-            state.currentAction = .dressUp
-            state.moodEmoji = "🕶️"
-            state.statusText = "Одет: \(outfit)"
-            state.executionToken = token
-            response = "Приоделся! \(outfit) сидит идеально. Самый стильный агент в твоем телефоне."
-            
+            let items = CatGarment.matching(item ?? "Худи и очки")
+            guard !items.isEmpty else { return "Пока такой вещи в гардеробе нет." }
+            let worn = CatGarment.equipping(items, over: wornGarments)
+            updateOutfit(worn, action: .dressUp, token: token)
+            response = "Примерил. На мне \(state.currentOutfit ?? "")."
         case .takeOff:
-            state.isDressed = false
-            state.currentOutfit = nil
-            state.currentAction = .takeOff
-            state.moodEmoji = "😸"
-            state.statusText = "Натуральная шерсть"
-            state.executionToken = token
-            response = "Скинул гардероб, остался в естественной шубке. Так дышится свободнее."
+            let remove = CatGarment.matching(item)
+            if item != nil && remove.isEmpty { return "Такую вещь я на себе не нашёл." }
+            let worn = item == nil ? [] : wornGarments.filter { !remove.contains($0) }
+            updateOutfit(worn, action: .takeOff, token: token)
+            response = worn.isEmpty ? "Вот и осталась одна шубка." : "Готово. На мне \(state.currentOutfit ?? "")."
             
         case .sleep:
             state.currentAction = .sleep
@@ -153,6 +151,17 @@ public final class CatActionHandler: ObservableObject {
         LiveActivityManager.shared.update(status: state.statusText, mood: state.moodEmoji, action: state.statusText)
         
         return response
+    }
+
+    private func updateOutfit(_ items: [CatGarment], action: CatActionType, token: String) {
+        var next = state
+        next.currentOutfit = items.isEmpty ? nil : items.map(\.rawValue).joined(separator: ", ")
+        next.isDressed = !items.isEmpty
+        next.currentAction = action
+        next.moodEmoji = items.isEmpty ? "😸" : "🧣"
+        next.statusText = next.currentOutfit ?? "Натуральная шерсть"
+        next.executionToken = token
+        state = next
     }
     
     // Интерактивное поглаживание кота по тапу

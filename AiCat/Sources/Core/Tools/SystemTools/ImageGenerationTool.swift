@@ -17,7 +17,7 @@ public final class ImageGenerationTool: ObservableObject {
         isGenerating = true
         defer { isGenerating = false }
         do {
-            let image = try await LocalInference.shared.image(url: url, prompt: prompt)
+            let image = try await LocalInference.shared.image(url: url, prompt: prompt, textModel: ModelManager.shared.activeModelURL)
             lastGeneratedImage = image
             return (image, "Картинка готова, кожаный!")
         } catch {

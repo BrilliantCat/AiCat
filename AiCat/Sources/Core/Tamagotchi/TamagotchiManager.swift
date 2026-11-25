@@ -70,7 +70,8 @@ public final class TamagotchiManager: ObservableObject {
         }
         commit(cat)
         if UIApplication.shared.applicationState == .active {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            if care == .pet { CatPurrFeedback.shared.respond(for: 1.4) }
+            else { UIImpactFeedbackGenerator(style: .soft).impactOccurred() }
         }
         return reply
     }

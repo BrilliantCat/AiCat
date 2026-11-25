@@ -81,7 +81,7 @@ struct CatSnapshot: Codable {
             satiety = max(10, satiety - 3)
             energy = max(10, energy - 8)
             action = "play"
-            reply = "Поймал! Кати ещё, кожаный."
+            reply = "Кати мяч, кожаный. Я за ним!"
         }
         actionUntil = date.addingTimeInterval(120)
         return reply
@@ -147,7 +147,6 @@ struct CatSnapshot: Codable {
          "computer": "За компьютером", "eat": "Перекусывает", "purr": "Мурчит"][action] ?? "Наблюдает"
     }
 
-    var roomArtwork: String { action == "purr" ? "idle" : action }
 }
 
 struct CatPicture: View {
@@ -160,9 +159,9 @@ struct CatPicture: View {
         let location: (name: String, folder: String)
         if let islandSide {
             let state = islandState ?? (scene == "sleep" ? "sleep" : "peek")
-            location = ("\(state)-\(islandSide)", "dynamic-island")
+            location = ("\(state)-\(islandSide)", islandSide == "leading" ? "kitten" : "dynamic-island")
         } else {
-            location = (scene == "purr" ? "idle" : scene, "widget")
+            location = (["idle","purr","sleep","play","eat","groom","computer"].contains(scene) ? scene : "idle", "kitten")
         }
         return Self.artwork(named: location.name, folder: location.folder)
     }
@@ -173,19 +172,16 @@ struct CatPicture: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let side = min(geometry.size.width, geometry.size.height)
             Group {
                 if let artwork {
                     Image(uiImage: artwork)
                         .resizable()
                         .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: islandSide == nil ? side * 0.16 : 0))
                 } else {
                     CatPortrait(scene: scene, outfit: outfit)
                 }
             }
-                .frame(width: islandSide == nil ? side : geometry.size.width,
-                       height: islandSide == nil ? side : geometry.size.height)
+                .frame(width: geometry.size.width, height: geometry.size.height)
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
         .accessibilityLabel("Кот AiCat. \(scene == "sleep" ? "Спит" : "Бодрствует")")

@@ -17,7 +17,7 @@ struct AiCatApp: App {
             MainView()
                 .preferredColorScheme(.dark)
                 .onChange(of: scenePhase, initial: true) { _, newPhase in
-                    if newPhase != .active {
+                    if newPhase == .background {
                         YogaCoachTool.shared.pause()
                         CatFitnessCoach.shared.pause()
                     }

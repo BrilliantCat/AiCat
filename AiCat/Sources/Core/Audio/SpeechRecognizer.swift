@@ -9,6 +9,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     
     @Published public var transcribedText: String = ""
     @Published public var isRecording: Bool = false
+    @Published private(set) var isTranscribing = false
     @Published public var errorMessage: String?
     
     private var audioEngine = AVAudioEngine()
@@ -17,29 +18,35 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var hasTap = false
     private var ownsSession = false
+    private var useLocalAfterError = false
+    private var recorder: AVAudioRecorder?
+    private var deadline: Task<Void, Never>?
+    private var recordingID = UUID()
+    private var localModel: URL? {
+        Self.bundledModel
+    }
+
+    nonisolated static var bundledModel: URL? {
+        Bundle.main.url(forResource: "ggml-base-q5_1", withExtension: "bin", subdirectory: "Speech")
+    }
     
     private init() {
         // Подбираем русский распознаватель речи
-        self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU")) ?? SFSpeechRecognizer()
+        self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU"))
     }
     
     public func requestPermissions(completion: @escaping (Bool) -> Void) {
-        SFSpeechRecognizer.requestAuthorization { authStatus in
-            DispatchQueue.main.async {
-                switch authStatus {
-                case .authorized:
-                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                        DispatchQueue.main.async {
-                            if !granted {
-                                self.errorMessage = "Предоставь доступ к микрофону в Настройки -> AiCat"
-                            }
-                            completion(granted)
-                        }
-                    }
-                default:
-                    self.errorMessage = "Предоставь доступ к Распознаванию речи в Настройки -> AiCat"
+        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+            Task { @MainActor in
+                guard granted else {
+                    self.errorMessage = "Разреши доступ к микрофону в настройках AiCat."
                     completion(false)
+                    return
                 }
+                if self.speechRecognizer?.supportsOnDeviceRecognition == true,
+                   SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+                    SFSpeechRecognizer.requestAuthorization { _ in DispatchQueue.main.async { completion(true) } }
+                } else { completion(true) }
             }
         }
     }
@@ -47,20 +54,18 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     public func startListening() throws {
         stopListening()
         
-        guard let recognizer = speechRecognizer else {
-            let err = "Распознавание речи недоступно на данном устройстве."
-            DispatchQueue.main.async { self.errorMessage = err }
-            throw NSError(domain: "AiCat", code: 1, userInfo: [NSLocalizedDescriptionKey: err])
-        }
-        
-        guard recognizer.supportsOnDeviceRecognition else {
-            throw NSError(domain: "AiCat", code: 2, userInfo: [NSLocalizedDescriptionKey: "Русское офлайн-распознавание речи недоступно на этом устройстве."])
-        }
         CatSpeechSynthesizer.shared.stop()
+        CatPurrFeedback.shared.stop()
+        MusicTool.shared.cancelBeat()
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         ownsSession = true
+        guard !useLocalAfterError, let recognizer = speechRecognizer, recognizer.supportsOnDeviceRecognition, recognizer.isAvailable,
+              SFSpeechRecognizer.authorizationStatus() == .authorized else {
+            do { try startLocalRecording() } catch { stopListening(); throw error }
+            return
+        }
         
         let request = SFSpeechAudioBufferRecognitionRequest()
         recognitionRequest = request
@@ -92,13 +97,96 @@ public final class OfflineSpeechRecognizer: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, let request, self.recognitionRequest === request else { return }
                 if let result { self.transcribedText = result.bestTranscription.formattedString }
-                if let error { self.errorMessage = error.localizedDescription }
-                if error != nil || result?.isFinal == true { self.stopListening() }
+                if let error {
+                    if self.localModel != nil && self.transcribedText.isEmpty {
+                        self.useLocalAfterError = true
+                        self.errorMessage = "Системная диктовка прервалась. Нажми микрофон ещё раз для локального распознавания."
+                    } else { self.errorMessage = error.localizedDescription }
+                }
+                if error != nil || result?.isFinal == true {
+                    if self.isTranscribing { self.recognitionRequest = nil }
+                    else { self.stopListening() }
+                }
             }
         }
     }
+
+    private func startLocalRecording() throws {
+        guard localModel != nil else { throw speechError("В сборке отсутствует модель русского голоса Whisper.") }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("AiCat-input-\(UUID()).caf")
+        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16000,
+                                       AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16]
+        let capture = try AVAudioRecorder(url: url, settings: settings)
+        recorder = capture
+        guard capture.record(forDuration: 30) else { throw speechError("Не удалось включить микрофон.") }
+        isRecording = true
+        transcribedText = ""
+        errorMessage = nil
+        deadline = Task {
+            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            _ = await finishListening()
+        }
+    }
+
+    private func speechError(_ message: String) -> NSError {
+        NSError(domain: "AiCat.Speech", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    func finishListening() async -> String {
+        guard isRecording else { return "" }
+        deadline?.cancel()
+        deadline = nil
+        let id = recordingID
+        isTranscribing = true
+        isRecording = false
+        if let capture = recorder, let model = localModel {
+            recorder = nil
+            capture.stop()
+            releaseSession()
+            let url = capture.url
+            let text = await Task.detached(priority: .userInitiated) { () -> String? in
+                defer { try? FileManager.default.removeItem(at: url) }
+                return Self.transcribe(recording: url, model: model)
+            }.value
+            guard id == recordingID else { return "" }
+            transcribedText = text ?? ""
+        } else {
+            audioEngine.stop()
+            recognitionRequest?.endAudio()
+            // Let Speech deliver the final words before cancelling the request.
+            for _ in 0..<15 {
+                if recognitionRequest == nil || id != recordingID { break }
+                try? await Task.sleep(for: .milliseconds(80))
+            }
+            guard id == recordingID else { return "" }
+        }
+        stopListening()
+        if transcribedText.isEmpty { errorMessage = "Не расслышал. Попробуй сказать фразу ещё раз." }
+        return transcribedText
+    }
     
+    nonisolated static func transcribe(recording url: URL, model: URL) -> String? {
+        guard let file = try? AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false),
+              file.processingFormat.sampleRate == 16000, file.processingFormat.channelCount == 1,
+              (3200...496000).contains(file.length),
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+              (try? file.read(into: buffer)) != nil, let samples = buffer.floatChannelData?[0] else { return nil }
+        let pcm = UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))
+        let energy = pcm.reduce(Float.zero) { $0 + $1 * $1 }
+        guard energy > Float(pcm.count) * 0.000001 else { return nil }
+        return AiCatTranscribeRussian(model.path, Data(buffer: pcm))?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public func stopListening() {
+        recordingID = UUID()
+        deadline?.cancel()
+        deadline = nil
+        if let recorder {
+            recorder.stop()
+            try? FileManager.default.removeItem(at: recorder.url)
+        }
+        recorder = nil
+        isTranscribing = false
         if audioEngine.isRunning { audioEngine.stop() }
         if hasTap {
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -110,6 +198,10 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         recognitionTask = nil
         
         isRecording = false
+        releaseSession()
+    }
+
+    private func releaseSession() {
         if ownsSession {
             try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
             ownsSession = false

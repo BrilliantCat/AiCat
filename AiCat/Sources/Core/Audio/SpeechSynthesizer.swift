@@ -6,9 +6,35 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     public static let shared = CatSpeechSynthesizer()
     
     @Published public var isSpeaking: Bool = false
-    @Published public var isVoiceEnabled: Bool = true
+    @Published public var isVoiceEnabled = UserDefaults.standard.object(forKey: "aicat.voiceEnabled") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(isVoiceEnabled, forKey: "aicat.voiceEnabled")
+            if !isVoiceEnabled { stop() }
+        }
+    }
     
+    @Published var preferredVoiceID = UserDefaults.standard.string(forKey: "aicat.speechVoice") ?? "" {
+        didSet { UserDefaults.standard.set(preferredVoiceID, forKey: "aicat.speechVoice") }
+    }
+
+    var russianVoices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("ru") }.sorted {
+            if ($0.gender == .male) != ($1.gender == .male) { return $0.gender == .male }
+            if $0.quality != $1.quality { return $0.quality.rawValue > $1.quality.rawValue }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    func utterance(for text: String) -> AVSpeechUtterance {
+        let result = AVSpeechUtterance(string: text)
+        let voices = russianVoices
+        result.voice = voices.first { $0.identifier == preferredVoiceID } ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
+        result.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
+        result.pitchMultiplier = result.voice?.gender == .male ? 0.98 : 0.89
+        return result
+    }
     private let synthesizer = AVSpeechSynthesizer()
+    private var activeUtterance: AVSpeechUtterance?
     
     override private init() {
         super.init()
@@ -36,29 +62,18 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         stop()
         setupAudioSession()
         
-        let utterance = AVSpeechUtterance(string: cleanedText)
-        
-        // Подбираем лучший русский голос
-        let ruVoices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.starts(with: "ru") }
-        utterance.voice = ruVoices.filter { $0.gender == .male }.sorted { $0.quality.rawValue > $1.quality.rawValue }.first
-                       ?? ruVoices.first(where: { $0.quality == .enhanced || $0.quality == .premium })
-                       ?? ruVoices.first
-                       ?? AVSpeechSynthesisVoice(language: "ru-RU")
-                       ?? AVSpeechSynthesisVoice(language: "en-US")
-        
-        // Фирменный голос AiCat: энергичный, кошачий, живой
-        utterance.rate = 0.46
-        utterance.pitchMultiplier = 0.95
-        utterance.volume = 1.0
-        
+        let utterance = utterance(for: cleanedText)
+        activeUtterance = utterance
         synthesizer.speak(utterance)
     }
     
     public func stop() {
+        guard activeUtterance != nil else { return }
+        activeUtterance = nil
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
-        DispatchQueue.main.async { self.isSpeaking = false }
+        isSpeaking = false
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
     
@@ -72,17 +87,25 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     }
     
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { self.isSpeaking = true }
+        DispatchQueue.main.async {
+            if self.activeUtterance === utterance { self.isSpeaking = true }
+        }
     }
     
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { self.isSpeaking = false }
-        // Освобождаем аудиосессию, чтобы музыка пользователя восстановила исходную громкость
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        finish(utterance)
     }
     
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { self.isSpeaking = false }
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        finish(utterance)
+    }
+
+    private func finish(_ utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async {
+            guard self.activeUtterance === utterance else { return }
+            self.activeUtterance = nil
+            self.isSpeaking = false
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        }
     }
 }

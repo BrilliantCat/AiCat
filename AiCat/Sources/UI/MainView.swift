@@ -1,6 +1,7 @@
 import SwiftUI
 
 public struct MainView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var catHandler = CatActionHandler.shared
     @StateObject private var tamagotchi = TamagotchiManager.shared
     @StateObject private var certificateWatchdog = CertificateWatchdog.shared
@@ -64,6 +65,8 @@ public struct MainView: View {
                 
                 if inRoom {
                     Cat3DSceneView(motion: catMotion, inRoom: true, isRoaming: tamagotchi.isRoaming,
+                                   lessonPaused: yogaCoach.isPaused || fitnessCoach.isPaused,
+                                   breathStep: yogaCoach.breathStep,
                                    isVisible: !showWardrobe && !showMediaStudio && !showModelManager &&
                                        !showDebugLog && !showRAGManager && !showPhoneControl)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -75,12 +78,17 @@ public struct MainView: View {
                     actionChipsBar
                 } else {
                     messagesScrollView
+                    if speechRecognizer.isTranscribing { ProgressView("Распознаю речь…") }
+                    else if speechRecognizer.isRecording { Text("Слушаю. Нажми микрофон, чтобы закончить.").font(.caption) }
                     if waitingForReply { ProgressView("Кот думает…").tint(.cyan) }
                     inputBar
                 }
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { _, phase in if phase != .active { CatPurrFeedback.shared.stop() } }
+        .onChange(of: speechSynthesizer.isVoiceEnabled) { _, enabled in if !enabled { CatPurrFeedback.shared.stop() } }
+        .onChange(of: speechSynthesizer.isSpeaking) { _, speaking in if speaking { CatPurrFeedback.shared.stop() } }
         .onChange(of: fitnessCoach.isWorkoutActive) { _, active in if active { inRoom = true } }
         .onChange(of: yogaCoach.isSessionActive) { _, active in if active { inRoom = true } }
         .onOpenURL { url in
@@ -136,18 +144,15 @@ public struct MainView: View {
                 self.inputText = newText
             }
         }
+        .onChange(of: speechRecognizer.isRecording) { _, recording in if recording { inRoom = false } }
     }
 
     private var catMotion: CatMotion? {
-        if fitnessCoach.isWorkoutActive && !fitnessCoach.isPaused {
+        if fitnessCoach.isWorkoutActive {
             return fitnessCoach.currentExerciseName.localizedCaseInsensitiveContains("присед") ? .squat : .pushUp
         }
-        if yogaCoach.isSessionActive && !yogaCoach.isPaused {
-            let index = yogaCoach.currentExerciseIndex
-            if yogaCoach.routine.indices.contains(index) {
-                let name = yogaCoach.routine[index].name
-                return name.localizedCaseInsensitiveContains("планк") ? .plank : .yoga
-            }
+        if yogaCoach.isSessionActive {
+            return yogaCoach.currentExercise.motion
         }
         if waitingForReply { return .think }
         if speechSynthesizer.isSpeaking { return .talk }
@@ -178,6 +183,18 @@ public struct MainView: View {
             }.accessibilityLabel("Озвучка ответов")
             Menu {
                 Button("Гардероб", systemImage: "tshirt") { showWardrobe = true }
+                Menu("Голос кота", systemImage: "speaker.wave.2") {
+                    Picker("Голос", selection: $speechSynthesizer.preferredVoiceID) {
+                        Text("Автоматически").tag("")
+                        ForEach(speechSynthesizer.russianVoices, id: \.identifier) { voice in
+                            Text(voice.name).tag(voice.identifier)
+                        }
+                    }
+                    Button("Послушать голос") {
+                        speechSynthesizer.isVoiceEnabled = true
+                        speechSynthesizer.speak(text: "Я здесь, кожаный. Рассказывай, как прошёл твой день?")
+                    }
+                }
                 Button("Фото и аудио", systemImage: "camera") { showMediaStudio = true }
                 Button("Телефон", systemImage: "iphone") { showPhoneControl = true }
                 Button("Документы", systemImage: "doc.text") { showRAGManager = true }
@@ -200,118 +217,55 @@ public struct MainView: View {
     // MARK: - Workout Live HUD
     
     private var workoutLiveBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "figure.strengthtraining.traditional")
-                .font(.title2)
-                .foregroundColor(.cyan)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(fitnessCoach.currentExerciseName): \(fitnessCoach.currentRepsCount) из \(fitnessCoach.targetReps)")
-                    .font(.subheadline)
-                    .bold()
-                    .foregroundColor(.white)
-                Text(fitnessCoach.catCheerMessage)
-                    .font(.caption2)
-                    .foregroundColor(.cyan)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(fitnessCoach.currentExerciseName).fontWeight(.semibold)
+                Spacer()
+                Text("\(fitnessCoach.currentRepsCount) / \(fitnessCoach.targetReps)").monospacedDigit()
             }
-            
-            Spacer()
-            
-            Button(fitnessCoach.isPaused ? "Продолжить" : "Пауза") {
-                if fitnessCoach.isPaused { fitnessCoach.resume() } else { fitnessCoach.pause() }
-            }.font(.caption).foregroundColor(.cyan)
-            Button("+1") {
-                fitnessCoach.manualRecordRep()
-            }
-            .font(.caption)
-            .bold()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.cyan.opacity(0.25))
-            .foregroundColor(.cyan)
-            .cornerRadius(10)
-            
-            Button("Стоп") {
-                fitnessCoach.stopWorkout()
-            }
-            .font(.caption)
-            .bold()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.red.opacity(0.25))
-            .foregroundColor(.red)
-            .cornerRadius(10)
-        }
-        .padding(10)
-        .background(Color.cyan.opacity(0.12))
-        .cornerRadius(14)
-        .padding(.horizontal)
-        .padding(.vertical, 4)
-    }
-    
-    // MARK: - Yoga Live HUD
-    
-    private var yogaLiveBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "figure.mind.and.body")
-                .font(.title2)
-                .foregroundColor(.green)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(yogaCoach.currentExercise.name)
-                        .font(.subheadline)
-                        .bold()
-                        .foregroundColor(.white)
-                    Text("⏱️ \(yogaCoach.remainingSeconds)с")
-                        .font(.caption)
-                        .bold()
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.2))
-                        .cornerRadius(6)
+            Text(fitnessCoach.catCheerMessage).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                if fitnessCoach.isPushupWorkout {
+                    Button(fitnessCoach.usingCamera ? "Датчик" : "Камера") { fitnessCoach.toggleCamera() }
+                        .disabled(fitnessCoach.isPaused)
+                        .accessibilityHint("Переключить источник автоматического счёта")
                 }
-                Text(yogaCoach.currentExercise.catComment)
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                    .lineLimit(2)
+                Button("+1") { fitnessCoach.manualRecordRep() }.disabled(fitnessCoach.isPaused)
+                Spacer()
+                Button(fitnessCoach.isPaused ? "Продолжить" : "Пауза") {
+                    if fitnessCoach.isPaused { fitnessCoach.resume() } else { fitnessCoach.pause() }
+                }
+                Button("Стоп", role: .destructive) { fitnessCoach.stopWorkout() }
             }
-            
-            Spacer()
-            
-            Button(yogaCoach.isPaused ? "Продолжить" : "Пауза") {
-                if yogaCoach.isPaused { yogaCoach.resume() } else { yogaCoach.pause() }
-            }.font(.caption).foregroundColor(.green)
-            Button("Далее") {
-                yogaCoach.nextPose()
-            }
-            .font(.caption)
-            .bold()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.green.opacity(0.25))
-            .foregroundColor(.green)
-            .cornerRadius(10)
-            
-            Button("Стоп") {
-                _ = yogaCoach.stopWorkout()
-            }
-            .font(.caption)
-            .bold()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Color.red.opacity(0.2))
-            .foregroundColor(.red)
-            .cornerRadius(10)
+            .buttonStyle(.bordered).controlSize(.small).font(.caption)
         }
-        .padding(10)
-        .background(Color.green.opacity(0.12))
-        .cornerRadius(14)
-        .padding(.horizontal)
-        .padding(.vertical, 4)
+        .font(.subheadline).padding(10).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal).padding(.vertical, 4)
     }
-    
+
+    private var yogaLiveBanner: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(yogaCoach.currentExercise.name).fontWeight(.semibold)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Text("\(yogaCoach.remainingSeconds) с").monospacedDigit().foregroundStyle(.mint)
+            }
+            Text(yogaCoach.currentExercise.catComment).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("\(yogaCoach.currentExerciseIndex + 1) из \(yogaCoach.routine.count)").foregroundStyle(.secondary)
+                Spacer()
+                Button(yogaCoach.isPaused ? "Продолжить" : "Пауза") {
+                    if yogaCoach.isPaused { yogaCoach.resume() } else { yogaCoach.pause() }
+                }
+                Button("Далее") { yogaCoach.nextPose() }
+                Button("Стоп", role: .destructive) { _ = yogaCoach.stopWorkout() }
+            }
+            .buttonStyle(.bordered).controlSize(.small).font(.caption)
+        }
+        .font(.subheadline).padding(10).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal).padding(.vertical, 4)
+    }
     private func speechErrorBanner(_ msg: String) -> some View {
         HStack {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -416,6 +370,7 @@ public struct MainView: View {
                 .padding(.top, 6)
             }
             .scrollDismissesKeyboard(.interactively)
+            .defaultScrollAnchor(.bottom)
             .onTapGesture {
                 isInputFocused = false
             }
@@ -465,7 +420,7 @@ public struct MainView: View {
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
-            .disabled(waitingForReply)
+            .disabled(waitingForReply || speechRecognizer.isTranscribing)
             
             if !inputText.isEmpty {
                 Button(action: {
@@ -474,7 +429,7 @@ public struct MainView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .foregroundColor(.cyan)
-                }.disabled(waitingForReply)
+                }.disabled(waitingForReply || speechRecognizer.isRecording || speechRecognizer.isTranscribing)
             }
         }
         .padding(.horizontal)
@@ -485,7 +440,7 @@ public struct MainView: View {
     // MARK: - Logic & AI Chat
     
     private func submitInput() {
-        guard !waitingForReply else { return }
+        guard !waitingForReply, !speechRecognizer.isRecording, !speechRecognizer.isTranscribing else { return }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         inputText = ""
@@ -544,12 +499,7 @@ public struct MainView: View {
         generator.impactOccurred()
         
         if speechRecognizer.isRecording {
-            speechRecognizer.stopListening()
-            let recognized = speechRecognizer.transcribedText
-            inputText = ""
-            if !recognized.isEmpty {
-                sendUserQuery(recognized)
-            }
+            Task { _ = await speechRecognizer.finishListening() }
         } else {
             speechRecognizer.requestPermissions { granted in
                 if granted {

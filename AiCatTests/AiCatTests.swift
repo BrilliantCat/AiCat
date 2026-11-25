@@ -1,8 +1,154 @@
 import XCTest
 import SceneKit
+import Metal
+import UIKit
+import AVFoundation
 @testable import AiCat
 
 final class AiCatTests: XCTestCase {
+    func testMusicStudioWritesAnAudibleBeat() throws {
+        let url = try MusicTool.render(style: "lo-fi")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+        XCTAssertEqual(Double(file.length) / file.processingFormat.sampleRate, 8 * 60.0 / 82.0, accuracy: 0.01)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 22050))
+        try file.read(into: buffer)
+        let samples = try XCTUnwrap(buffer.floatChannelData?[0])
+        let pcm = UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))
+        XCTAssertGreaterThan(pcm.reduce(Float.zero) { $0 + $1 * $1 } / Float(pcm.count), 0.001)
+    }
+
+    func testChatRecognizesWordGamesAndPlaceNames() {
+        XCTAssertTrue(PromptBuilder.wordGameInvitation("Давай поиграем в слова!"))
+        XCTAssertTrue(PromptBuilder.wordGameInvitation("Сыграем в города?"))
+        XCTAssertFalse(PromptBuilder.wordGameInvitation("Поиграй с мячом"))
+        XCTAssertFalse(PromptBuilder.wordGameInvitation("Не хочу играть в слова"))
+        XCTAssertEqual(PromptBuilder.placeNameHint("Йош-корола"), "Йошкар-Ола")
+        XCTAssertNil(PromptBuilder.placeNameHint("Королёв"))
+    }
+
+    func testBundledModelTranscribesRussianOffline() throws {
+        let model = try XCTUnwrap(OfflineSpeechRecognizer.bundledModel)
+        let recording = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "RussianGreeting", withExtension: "wav"))
+        let text = try XCTUnwrap(OfflineSpeechRecognizer.transcribe(recording: recording, model: model)).lowercased()
+        for word in ["привет", "котик", "поиграем"] { XCTAssertTrue(text.contains(word), text) }
+    }
+
+    func testWardrobeRestoresOldNamesAndReplacesOnlyOneSlot() {
+        let original = CatGarment.matching("Кожаная кепка, Чёрные кибер-очки и Неоновый худи")
+        XCTAssertEqual(Set(original), [.cap, .glasses, .hoodie])
+        XCTAssertEqual(CatGarment.matching("Бархатная бабочка"), [.bow])
+        let layered = CatGarment.equipping([.beret, .bow], over: original)
+        XCTAssertEqual(Set(layered), [.beret, .glasses, .bow, .hoodie])
+        XCTAssertEqual(Set(CatGarment.matching(layered.map(\.rawValue).joined(separator: ", "))), Set(layered))
+    }
+
+    @MainActor
+    func testLessonPosesDrawWithoutMagentaFrames() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal unavailable") }
+        let scene = SCNScene()
+        let cat = SCNNode()
+        scene.rootNode.addChildNode(cat)
+        let rig = try XCTUnwrap(CatMotionRig(cat: cat))
+        let camera = SCNNode()
+        camera.camera = SCNCamera()
+        camera.position = SCNVector3(2.5, 1.2, 3)
+        camera.look(at: SCNVector3(0, 0.65, 0))
+        scene.rootNode.addChildNode(camera)
+        let renderer = SCNRenderer(device: device, options: nil)
+        renderer.scene = scene
+        renderer.pointOfView = camera
+        renderer.autoenablesDefaultLighting = true
+        scene.background.contents = UIColor.black
+        for motion: CatMotion in [.breath, .shoulders, .plank, .pushUp] {
+            rig.set(motion, reduced: true)
+            rig.advance(by: 0.5)
+            let size = 96
+            let shot = renderer.snapshot(atTime: 0, with: CGSize(width: 96, height: 96), antialiasingMode: .none)
+            let cgImage = try XCTUnwrap(shot.cgImage)
+            var pixels = [UInt8](repeating: 0, count: size * size * 4)
+            try pixels.withUnsafeMutableBytes { (buffer: UnsafeMutableRawBufferPointer) in
+                let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: size, height: size,
+                    bitsPerComponent: 8, bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 96, height: 96))
+            }
+            var visible = 0, pink = 0
+            for i in stride(from: 0, to: pixels.count, by: 4) {
+                if max(pixels[i], pixels[i+1], pixels[i+2]) > 25 { visible += 1 }
+                if pixels[i] > 190 && pixels[i+1] < 70 && pixels[i+2] > 190 { pink += 1 }
+            }
+            XCTAssertGreaterThan(visible, 60, motion.rawValue)
+            XCTAssertLessThan(pink, size * size / 10, motion.rawValue)
+        }
+    }
+    func testCameraCountsOnlyAFullReturnAndRecalibratesAfterLosingTheFace() {
+        var detector = PushupCounter()
+        for sample in 0...6 {
+            XCTAssertFalse(detector.update(distance: 0.56, at: Double(sample) / 10))
+        }
+        XCTAssertEqual(detector.phase, .ready)
+        XCTAssertFalse(detector.update(distance: 0.51, at: 0.70))
+        XCTAssertFalse(detector.update(distance: 0.34, at: 0.82))
+        XCTAssertFalse(detector.update(distance: 0.35, at: 1.02))
+        XCTAssertTrue(detector.update(distance: 0.55, at: 1.26))
+        XCTAssertFalse(detector.update(distance: 0.56, at: 1.34))
+        XCTAssertFalse(detector.update(distance: 0.36, at: 1.49))
+        XCTAssertFalse(detector.update(distance: nil, at: 2.30))
+        XCTAssertFalse(detector.update(distance: 0.55, at: 2.45))
+        XCTAssertEqual(detector.phase, .calibrating)
+    }
+
+    func testBreathJoinsAtTheDisplayedStepBoundary() {
+        let join = Date()
+        let inhale = BreathStep(inhale: true, duration: 4, end: join)
+        let exhale = BreathStep(inhale: false, duration: 6, end: join.addingTimeInterval(6))
+        XCTAssertEqual(inhale.phase(at: join), exhale.phase(at: join))
+        XCTAssertEqual(inhale.phase(at: join.addingTimeInterval(-2)), 0.25)
+        XCTAssertEqual(exhale.phase(at: join.addingTimeInterval(3)), 0.75)
+    }
+
+    func testBallGameCrossesRugAndBatsAtPawReach() {
+        for fps: Float in [20, 30, 60] {
+            var game = CatBallGame()
+            game.start(at: .zero, facing: -0.54, repeats: true)
+            var minX = game.position.x
+            var maxX = minX
+            for _ in 0..<Int(18 * fps) {
+                let previousHits = game.hits
+                game.advance(by: 1 / fps)
+                minX = min(minX, game.position.x)
+                maxX = max(maxX, game.position.x)
+                XCTAssertLessThanOrEqual(abs(game.ball.x) * CatRoomScenery.kittenScale, 1.786)
+                if game.hits > previousHits {
+                    let paw = SIMD2<Float>(0.163 * cos(game.heading) + 0.72 * sin(game.heading),
+                                           -0.163 * sin(game.heading) + 0.72 * cos(game.heading))
+                    XCTAssertLessThanOrEqual(simd_distance(game.position + paw, game.ball), CatBallGame.radius)
+                }
+            }
+            XCTAssertGreaterThanOrEqual(game.hits, 3)
+            XCTAssertGreaterThan((maxX - minX) * CatRoomScenery.kittenScale, 2)
+        }
+    }
+
+    func testSingleThrowCanBeRedirectedAndEnds() {
+        var game = CatBallGame()
+        game.start(at: .zero, facing: 0, target: [40, 20], repeats: false)
+        for _ in 0..<15 { game.advance(by: 1 / 30) }
+        game.throwBall(towards: [-1.5, 0.4])
+        for _ in 0..<360 { game.advance(by: 1 / 30) }
+        XCTAssertEqual(game.hits, 1)
+        XCTAssertEqual(game.phase, .idle)
+    }
+
+    func testLivingRoomResourcesInBothLightingConditions() throws {
+        for hour in [12, 23] {
+            let scene = SCNScene()
+            XCTAssertTrue(CatRoomScenery.install(in: scene, hour: hour))
+            let room = try XCTUnwrap(scene.rootNode.childNode(withName: "SittingRoom", recursively: false))
+            XCTAssertEqual(room.geometry?.geometryElementCount, 6)
+        }
+    }
     
     func testToolCallWithBracesInString() {
         let input = #"{"tool":"create_note","parameters":{"title":"{кот}","content":"Он сказал \"мяу\""}}"#
@@ -66,18 +212,51 @@ final class AiCatTests: XCTestCase {
     }
 
     @MainActor
-    func testRigWalkAndReducedMotionSleepPose() {
-        let cat = SCNNode(), torso = SCNNode(), head = SCNNode(), tail = SCNNode()
-        cat.addChildNode(torso)
-        torso.addChildNode(head)
-        torso.addChildNode(tail)
-        let rig = CatMotionRig(cat: cat, torso: torso, head: head, tail: tail, fur: SCNMaterial())
-        rig.set(.walk, reduced: false)
+    func testKittenSettlesHaunchesBeforeClosingEyes() throws {
+        let root = SCNNode()
+        let rig = try XCTUnwrap(CatMotionRig(cat: root))
+        let pelvis = try XCTUnwrap(root.childNode(withName: "pelvis", recursively: true))
+        let head = try XCTUnwrap(root.childNode(withName: "head", recursively: true))
+        let eye = try XCTUnwrap(root.childNode(withName: "eyeL", recursively: true))
+        let standingHead = head.simdWorldPosition.y
+        let standingPelvis = pelvis.simdWorldPosition.y
+        rig.set(.sleep, reduced: false)
         rig.advance(by: 0.5)
-        XCTAssertGreaterThan(torso.eulerAngles.x, 0.45)
+        XCTAssertLessThan(pelvis.simdWorldPosition.y, standingPelvis - 0.1)
+        XCTAssertGreaterThan(head.simdWorldPosition.y, standingHead - 0.07)
+        XCTAssertGreaterThan(eye.simdScale.y, 0.9)
+        rig.advance(by: 1.35)
+        XCTAssertLessThan(eye.simdScale.y, 0.1)
+        let restingHead = head.simdWorldPosition
+        rig.advance(by: 0.01)
+        XCTAssertLessThan(simd_distance(restingHead, head.simdWorldPosition), 0.01)
+        rig.set(.walk, reduced: false)
+        rig.advance(by: 0.4)
+        XCTAssertGreaterThan(head.simdWorldPosition.y, standingHead - 0.10)
+    }
+
+    @MainActor
+    func testBundledKittenWalkAndSleep() throws {
+        let root = SCNNode()
+        let rig = try XCTUnwrap(CatMotionRig(cat: root))
+        let surface = try XCTUnwrap(root.childNode(withName: "BritishKittenSkin", recursively: true))
+        let skin = try XCTUnwrap(surface.skinner)
+        XCTAssertEqual(skin.bones.count, 31)
+        let paw = try XCTUnwrap(root.childNode(withName: "foreL3", recursively: true))
+        rig.set(.walk, reduced: false)
+        rig.advance(by: 0.8)
+        let start = paw.simdWorldPosition
+        rig.advance(by: 0.2)
+        XCTAssertGreaterThan(simd_distance(start, paw.simdWorldPosition), 0.07)
+        let head = try XCTUnwrap(root.childNode(withName: "head", recursively: true))
+        let standingHeight = head.simdWorldPosition.y
         rig.set(.sleep, reduced: true)
-        XCTAssertGreaterThan(torso.eulerAngles.z, 0.2)
-        XCTAssertLessThan(torso.position.y, 0.3)
+        XCTAssertLessThan(head.simdWorldPosition.y, standingHeight - 0.24)
+        XCTAssertGreaterThan(paw.simdWorldPosition.y, 0.015)
+        for motion in CatMotion.allCases {
+            rig.set(motion, reduced: true)
+            XCTAssertTrue(head.simdWorldPosition.y.isFinite)
+        }
     }
 
     func testAutonomousCatKeepsExplicitActionAndBounds() {

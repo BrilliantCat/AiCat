@@ -29,8 +29,25 @@ jobs:
           fi
           test -d Frameworks/llama.xcframework
 
+      - name: Install offline speech engine and multilingual model
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/ggml-org/whisper.cpp/releases/download/v1.7.6/whisper-v1.7.6-xcframework.zip -o /tmp/whisper.zip
+          echo "9fcb28106d0b94a525e59bec057e35b57033195ac7408d7e1ab8e4b597cdfeb5  /tmp/whisper.zip" | shasum -a 256 -c -
+          unzip -q /tmp/whisper.zip -d /tmp/aicat-whisper
+          framework=$(find /tmp/aicat-whisper -type d -name whisper.xcframework -print -quit)
+          test -n "$framework"
+          cp -R "$framework" Frameworks/whisper.xcframework
+          mkdir -p Assets/Speech
+          curl -fL --retry 3 https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin -o Assets/Speech/ggml-base-q5_1.bin
+          echo "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  Assets/Speech/ggml-base-q5_1.bin" | shasum -a 256 -c -
+          curl -fL --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.7.6/LICENSE -o Assets/Speech/whisper-cpp-LICENSE.txt
+          curl -fL --retry 3 https://raw.githubusercontent.com/openai/whisper/main/LICENSE -o Assets/Speech/whisper-model-LICENSE.txt
+
       - name: Generate Xcode Project
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          /usr/libexec/PlistBuddy -c "Add :AiCatSourceRevision string ${GITHUB_SHA:0:8}/${GITHUB_RUN_NUMBER}" AiCat/Info.plist
 
       - name: Cache Swift packages
         uses: actions/cache@v4
@@ -131,6 +148,8 @@ jobs:
             exit 1
           fi
           xcrun lipo "$framework" -verify_arch arm64
+          xcrun lipo "$app/Frameworks/whisper.framework/whisper" -verify_arch arm64
+          test -s "$app/Speech/ggml-base-q5_1.bin"
           xcrun otool -L "$app/AiCat"
           xcrun otool -L "$framework"
 
@@ -141,8 +160,15 @@ jobs:
           cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
           app="build/Payload/AiCat.app"
           widget="$app/PlugIns/AiCatWidget.appex"
-          test -f "$widget/AiCat-Visuals/widget/sleep.png"
-          test -f "$widget/AiCat-Visuals/dynamic-island/peek-leading.png"
+          for resource in BritishKitten.mesh BritishKitten.json SilverCoat.png Purr.wav; do
+            test -s "$app/CatModel/$resource" || { echo "::error::Missing CatModel/$resource"; exit 1; }
+          done
+          for resource in SittingRoom.mesh SittingRoom.json Kilim.jpg Oak.jpg Linen.jpg StreetDay.jpg StreetNight.jpg; do
+            test -s "$app/LivingRoom/$resource" || { echo "::error::Missing LivingRoom/$resource"; exit 1; }
+          done
+          for pose in idle purr sleep play eat groom computer peek-leading sleep-leading think-leading; do
+            test -s "$widget/AiCat-Visuals/kitten/$pose.png" || { echo "::error::Missing kitten/$pose.png"; exit 1; }
+          done
           # Carry the requested App Group in both executables for SideStore to re-sign.
           for framework in "$app"/Frameworks/*.framework "$app"/Frameworks/*.dylib; do
             if [ -e "$framework" ]; then codesign --force --sign - --timestamp=none "$framework"; fi

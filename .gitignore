@@ -7,3 +7,4 @@ Frameworks/
 
 .tmp-validation/
 SourcePackages/
+__pycache__/

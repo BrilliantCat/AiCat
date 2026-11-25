@@ -7,6 +7,18 @@ public struct YogaExercise: Identifiable {
     public let durationSeconds: Int
     public let catComment: String
     public let instructions: String
+    let motion: CatMotion
+}
+
+struct BreathStep {
+    let inhale: Bool
+    let duration: TimeInterval
+    let end: Date
+
+    func phase(at now: Date) -> Float {
+        let progress = Float(min(1, max(0, 1 - end.timeIntervalSince(now) / duration)))
+        return (inhale ? progress : 1 + progress) * 0.5
+    }
 }
 
 @MainActor
@@ -22,25 +34,25 @@ public final class YogaCoachTool: ObservableObject {
             name: "Поза Марджариасана («Кошачья спина»)",
             durationSeconds: 30,
             catComment: "Вставай на четвереньки и выгибай спину дугой! Вдох — мягкий прогиб, выдох — спина вверх.",
-            instructions: "Мягкое вытяжение позвоночника и снятие зажимов после долгого сидения."
+            instructions: "Мягкое вытяжение позвоночника и снятие зажимов после долгого сидения.", motion: .yoga
         ),
         YogaExercise(
             name: "Кошачьи потягивания («Лапки вперед»)",
             durationSeconds: 30,
             catComment: "Тяни руки вперед, грудь к полу. Представь, что тянешься за самой вкусной рыбкой на столе!",
-            instructions: "Раскрытие плечевых суставов и грудной клетки."
+            instructions: "Раскрытие плечевых суставов и грудной клетки.", motion: .stretch
         ),
         YogaExercise(
             name: "Королевская планка с котом",
             durationSeconds: 45,
             catComment: "Держи планку! Я сижу у тебя между лопаток. Не провисай, держи спину ровно!",
-            instructions: "Укрепление мышц кора, пресса и рук."
+            instructions: "Укрепление мышц кора, пресса и рук.", motion: .plank
         ),
         YogaExercise(
             name: "Скрутка на коврике («Свернуться калачиком»)",
             durationSeconds: 30,
             catComment: "Ложись на спину, колени к груди. Расслабься и сделай глубокий выдох. Можешь даже помурчать.",
-            instructions: "Полный релакс и снятие усталости."
+            instructions: "Полный релакс и снятие усталости.", motion: .curl
         )
     ]
     
@@ -58,18 +70,18 @@ public final class YogaCoachTool: ObservableObject {
         switch plan {
         case "breathing":
             return (0..<4).flatMap { _ in [
-                YogaExercise(name: "Вдох", durationSeconds: 4, catComment: "Спокойно вдохни носом.", instructions: "Дыши в удобном темпе."),
-                YogaExercise(name: "Выдох", durationSeconds: 6, catComment: "Медленно выдохни, расслабь плечи.", instructions: "Без задержки дыхания.")
+                YogaExercise(name: "Вдох", durationSeconds: 4, catComment: "Спокойно вдохни носом.", instructions: "Дыши в удобном темпе.", motion: .breath),
+                YogaExercise(name: "Выдох", durationSeconds: 6, catComment: "Медленно выдохни, расслабь плечи.", instructions: "Без задержки дыхания.", motion: .breath)
             ] }
         case "mobility":
             return [
-                YogaExercise(name: "Плечи", durationSeconds: 30, catComment: "Медленно подними и опусти плечи. Затем сделай небольшие круги.", instructions: "Двигайся плавно."),
-                YogaExercise(name: "Шаг на месте", durationSeconds: 45, catComment: "Шагай на месте в удобном темпе.", instructions: "Дыши свободно."),
-                YogaExercise(name: "Потягивания", durationSeconds: 30, catComment: "Потяни руки вверх, затем мягко опусти.", instructions: "Выбирай комфортную амплитуду.")
+                YogaExercise(name: "Плечи", durationSeconds: 30, catComment: "Медленно подними и опусти плечи. Затем сделай небольшие круги.", instructions: "Двигайся плавно.", motion: .shoulders),
+                YogaExercise(name: "Шаг на месте", durationSeconds: 45, catComment: "Шагай на месте в удобном темпе.", instructions: "Дыши свободно.", motion: .walk),
+                YogaExercise(name: "Потягивания", durationSeconds: 30, catComment: "Потяни руки вверх, затем мягко опусти.", instructions: "Выбирай комфортную амплитуду.", motion: .stretch)
             ]
         case "plank":
-            return [YogaExercise(name: "Планка", durationSeconds: 20, catComment: "Локти под плечами. Можно опереться на колени. Дыши свободно.", instructions: "Остановись при боли."),
-                    YogaExercise(name: "Отдых", durationSeconds: 30, catComment: "Расслабься, кожаный. Сделай спокойный вдох.", instructions: "Восстанови дыхание.")]
+            return [YogaExercise(name: "Планка", durationSeconds: 20, catComment: "Локти под плечами. Можно опереться на колени. Дыши свободно.", instructions: "Остановись при боли.", motion: .plank),
+                    YogaExercise(name: "Отдых", durationSeconds: 30, catComment: "Расслабься, кожаный. Сделай спокойный вдох.", instructions: "Восстанови дыхание.", motion: .breath)]
         default: return Self.yoga
         }
     }
@@ -105,6 +117,12 @@ public final class YogaCoachTool: ObservableObject {
     }
 
     public var currentExercise: YogaExercise { routine[currentExerciseIndex] }
+
+    var breathStep: BreathStep? {
+        guard isSessionActive, plan == "breathing", let deadline else { return nil }
+        return BreathStep(inhale: currentExerciseIndex.isMultiple(of: 2),
+                          duration: Double(currentExercise.durationSeconds), end: deadline)
+    }
 
     public func startWorkout(type: String = "yoga") -> String {
         stopFitness()

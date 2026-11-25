@@ -1,6 +1,14 @@
 import SwiftUI
 import SceneKit
 
+private final class CatSceneView: SCNView {
+    var updateFraming: (() -> Void)?
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateFraming?()
+    }
+}
+
 public struct Cat3DSceneView: UIViewRepresentable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -9,37 +17,46 @@ public struct Cat3DSceneView: UIViewRepresentable {
     var requestedMotion: CatMotion?
     var inRoom = false
     var isRoaming = false
+    var lessonPaused = false
+    var breathStep: BreathStep?
     var isVisible = true
     
     public init() {}
 
-    init(motion: CatMotion?, inRoom: Bool = false, isRoaming: Bool = false, isVisible: Bool = true) {
+    init(motion: CatMotion?, inRoom: Bool = false, isRoaming: Bool = false,
+         lessonPaused: Bool = false, breathStep: BreathStep? = nil, isVisible: Bool = true) {
         requestedMotion = motion
         self.inRoom = inRoom
         self.isRoaming = isRoaming
+        self.lessonPaused = lessonPaused
+        self.breathStep = breathStep
         self.isVisible = isVisible
     }
     
     public func makeUIView(context: Context) -> SCNView {
-        let scnView = SCNView()
+        let scnView = CatSceneView()
         let scene = SCNScene()
         scnView.scene = scene
         scnView.allowsCameraControl = false
         scnView.autoenablesDefaultLighting = false
-        scnView.backgroundColor = UIColor.clear
+        let backdrop = inRoom ? UIColor(red: 0.15, green: 0.14, blue: 0.13, alpha: 1) : .clear
+        scnView.backgroundColor = backdrop
+        scnView.isOpaque = inRoom
+        scene.background.contents = backdrop
         scnView.antialiasingMode = .multisampling4X
         scnView.preferredFramesPerSecond = 30
         scnView.isPlaying = true
         scnView.rendersContinuously = true
         
         let rootNode = scene.rootNode
+        let evening = !(7..<21).contains(Calendar.current.component(.hour, from: Date()))
         
         // 1. СТУДИЙНОЕ КИНЕМАТОГРАФИЧЕСКОЕ ОСВЕЩЕНИЕ (4-точечный свет)
         let keyLight = SCNNode()
         keyLight.light = SCNLight()
         keyLight.light?.type = .directional
         keyLight.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.94, alpha: 1.0)
-        keyLight.light?.intensity = 850
+        keyLight.light?.intensity = inRoom && evening ? 560 : 850
         keyLight.light?.castsShadow = inRoom
         keyLight.light?.shadowColor = UIColor(white: 0.12, alpha: 0.32)
         keyLight.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
@@ -53,7 +70,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         cyanRim.light = SCNLight()
         cyanRim.light?.type = .omni
         cyanRim.light?.color = UIColor(red: 0.65, green: 0.85, blue: 0.9, alpha: 1.0)
-        cyanRim.light?.intensity = 500
+        cyanRim.light?.intensity = inRoom && evening ? 320 : 500
         cyanRim.position = SCNVector3(x: -3.0, y: 2.5, z: -2.8)
         rootNode.addChildNode(cyanRim)
         
@@ -74,312 +91,73 @@ public struct Cat3DSceneView: UIViewRepresentable {
         // Камера
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
-        cameraNode.position = inRoom ? SCNVector3(0, 1.88, 4.25) : SCNVector3(0, 1.05, 4)
+        cameraNode.position = inRoom ? SCNVector3(0, 2.20, 6.3) : SCNVector3(0, 1.05, 4)
+        cameraNode.camera?.projectionDirection = .vertical
         cameraNode.camera?.fieldOfView = inRoom ? 46 : 38
-        cameraNode.look(at: SCNVector3(0, 1.0, 0))
+        cameraNode.look(at: SCNVector3(0, 0.83, 0))
         scnView.pointOfView = cameraNode
         rootNode.addChildNode(cameraNode)
         
-        if inRoom { CatRoomScenery.install(in: scene) }
+        if inRoom && !CatRoomScenery.install(in: scene) {
+            DebugLogger.shared.log("Ошибка чтения ресурсов LivingRoom", level: .error, tag: "SceneKit")
+        }
         
         // 3. ПЕРСОНАЖ: СТИЛЬНЫЙ КОТ AICAT
         let catRoot = SCNNode()
         catRoot.name = "AiCatRoot"
         catRoot.position = SCNVector3(0, 0, 0)
         
-        // Отдельный узел для дыхания (чтобы сальто и трюки не конфликтовали с дыханием!)
-        let breatheNode = SCNNode()
-        breatheNode.name = "BreatheNode"
-        catRoot.addChildNode(breatheNode)
-        
-        // Материалы кота
-        let furMaterial = SCNMaterial()
-        furMaterial.diffuse.contents = Self.furTexture // Сапфирово-серый британец
-        furMaterial.roughness.contents = 0.95
-        furMaterial.lightingModel = .physicallyBased
-        furMaterial.specular.contents = UIColor(white: 0.35, alpha: 1.0)
-        
-        let furWhiteMaterial = SCNMaterial()
-        furWhiteMaterial.diffuse.contents = UIColor(red: 0.66, green: 0.68, blue: 0.71, alpha: 1.0)
-        furWhiteMaterial.roughness.contents = 0.6
-        
-        let pinkMaterial = SCNMaterial()
-        pinkMaterial.diffuse.contents = UIColor(red: 0.75, green: 0.43, blue: 0.48, alpha: 1.0)
-        
-        let eyeMaterial = SCNMaterial()
-        eyeMaterial.diffuse.contents = UIColor(red: 0.42, green: 0.78, blue: 0.20, alpha: 1.0) // Изумрудный свет
-        eyeMaterial.specular.contents = UIColor(white: 0.8, alpha: 1)
-        eyeMaterial.shininess = 0.8
-        
-        // --- ГОЛОВА ---
-        let headGeo = SCNSphere(radius: 0.52)
-        headGeo.firstMaterial = furMaterial
-        let headNode = SCNNode(geometry: headGeo)
-        headNode.name = "Head"
-        headNode.position = SCNVector3(0, 1.25, 0)
-        headNode.simdScale = [1.04, 0.94, 1]
-        breatheNode.addChildNode(headNode)
-        let stripe = SCNMaterial()
-        stripe.diffuse.contents = UIColor(red: 0.23, green: 0.25, blue: 0.28, alpha: 1)
-        // Short silver-tabby bars follow the curvature of the forehead.
-        for index in -1...1 {
-            let mark = SCNNode(geometry: SCNSphere(radius: 1))
-            mark.geometry?.firstMaterial = stripe
-            mark.simdScale = [0.024, 0.088, 0.012]
-            let x = Float(index) * 0.095
-            let y: Float = 0.29
-            mark.simdPosition = [x, y, sqrt(0.52 * 0.52 - x * x - y * y)]
-            mark.simdEulerAngles = [-0.60, x * 2, -x]
-            headNode.addChildNode(mark)
+        if let rig = CatMotionRig(cat: catRoot) {
+            context.coordinator.rig = rig
+            Self.installOutfits(on: catRoot)
+            let revision = Bundle.main.object(forInfoDictionaryKey: "AiCatSourceRevision") as? String ?? "локальная"
+            DebugLogger.shared.log("BritishKitten v3 · Скелет подключён · Сборка \(revision)", tag: "SceneKit")
+        } else {
+            DebugLogger.shared.log("Ошибка чтения ресурсов CatModel", level: .error, tag: "SceneKit")
+            let message = UILabel()
+            message.text = "Не удалось загрузить 3D-модель BritishKitten из приложения."
+            message.textColor = .white
+            message.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+            message.numberOfLines = 0
+            message.textAlignment = .center
+            message.translatesAutoresizingMaskIntoConstraints = false
+            scnView.addSubview(message)
+            NSLayoutConstraint.activate([
+                message.centerYAnchor.constraint(equalTo: scnView.centerYAnchor),
+                message.leadingAnchor.constraint(equalTo: scnView.leadingAnchor),
+                message.trailingAnchor.constraint(equalTo: scnView.trailingAnchor)
+            ])
         }
-        
-        // Щечки
-        let cheekGeo = SCNSphere(radius: 0.105)
-        cheekGeo.firstMaterial = furWhiteMaterial
-        let leftCheek = SCNNode(geometry: cheekGeo)
-        leftCheek.position = SCNVector3(-0.09, -0.13, 0.47)
-        headNode.addChildNode(leftCheek)
-        
-        let rightCheek = SCNNode(geometry: cheekGeo)
-        rightCheek.position = SCNVector3(0.09, -0.13, 0.47)
-        headNode.addChildNode(rightCheek)
-        
-        // Носик
-        let noseGeo = SCNSphere(radius: 0.045)
-        noseGeo.firstMaterial = pinkMaterial
-        let noseNode = SCNNode(geometry: noseGeo)
-        noseNode.position = SCNVector3(0, -0.075, 0.55)
-        headNode.addChildNode(noseNode)
-        
-        // Глаза с морганием
-        let eyeGeo = SCNSphere(radius: 0.145)
-        eyeGeo.firstMaterial = eyeMaterial
-        let leftEye = SCNNode(geometry: eyeGeo)
-        leftEye.position = SCNVector3(-0.205, 0.065, 0.445)
-        leftEye.name = "LeftEye"
-        headNode.addChildNode(leftEye)
-        
-        let rightEye = SCNNode(geometry: eyeGeo)
-        rightEye.position = SCNVector3(0.205, 0.065, 0.445)
-        rightEye.name = "RightEye"
-        headNode.addChildNode(rightEye)
-        
-        let blinkAction = SCNAction.sequence([
-            SCNAction.wait(duration: 3.5),
-            scaleAction(to: SCNVector3(1.0, 0.1, 1.0), duration: 0.08),
-            scaleAction(from: SCNVector3(1.0, 0.1, 1.0), to: SCNVector3(1.0, 1.0, 1.0), duration: 0.08)
-        ])
-        leftEye.runAction(SCNAction.repeatForever(blinkAction), forKey: "blink")
-        rightEye.runAction(SCNAction.repeatForever(blinkAction), forKey: "blink")
-
-        for eye in [leftEye, rightEye] {
-            let pupil = SCNNode(geometry: SCNSphere(radius: 0.072))
-            pupil.geometry?.firstMaterial?.diffuse.contents = UIColor(white: 0.025, alpha: 1)
-            pupil.scale = SCNVector3(0.55, 1.2, 0.28)
-            pupil.position = SCNVector3(0, 0, 0.13)
-            eye.addChildNode(pupil)
-            let glint = SCNNode(geometry: SCNSphere(radius: 0.028))
-            glint.geometry?.firstMaterial?.diffuse.contents = UIColor.white
-            glint.geometry?.firstMaterial?.lightingModel = .constant
-            glint.position = SCNVector3(-0.035, 0.045, 0.14)
-            eye.addChildNode(glint)
-        }
-
-        let mouth = SCNNode(geometry: SCNSphere(radius: 0.036))
-        mouth.name = "Mouth"
-        mouth.position = SCNVector3(0, -0.195, 0.515)
-        mouth.scale = SCNVector3(0.7, 0.18, 0.3)
-        mouth.geometry?.firstMaterial?.diffuse.contents = UIColor(white: 0.08, alpha: 1)
-        headNode.addChildNode(mouth)
-        
-        // Усы
-        let whiskerGeo = SCNCylinder(radius: 0.006, height: 0.42)
-        whiskerGeo.firstMaterial?.diffuse.contents = UIColor.white
-        for (i, angle) in [-0.15, 0.0, 0.15].enumerated() {
-            let yOff = Float(i) * 0.035
-            let lw = SCNNode(geometry: whiskerGeo)
-            lw.position = SCNVector3(-0.35, -0.13 + yOff, 0.38)
-            lw.eulerAngles = SCNVector3(0, 0, Float.pi / 2.0 + Float(angle))
-            headNode.addChildNode(lw)
-            
-            let rw = SCNNode(geometry: whiskerGeo)
-            rw.position = SCNVector3(0.35, -0.13 + yOff, 0.38)
-            rw.eulerAngles = SCNVector3(0, 0, Float.pi / 2.0 - Float(angle))
-            headNode.addChildNode(rw)
-        }
-        
-        // Ушки
-        let earGeo = SCNCone(topRadius: 0.01, bottomRadius: 0.19, height: 0.36)
-        earGeo.firstMaterial = furMaterial
-        let leftEar = SCNNode(geometry: earGeo)
-        leftEar.name = "LeftEar"
-        leftEar.position = SCNVector3(-0.32, 0.49, 0.05)
-        leftEar.eulerAngles = SCNVector3(0, 0, 0.28)
-        leftEar.simdScale.z = 0.62
-        headNode.addChildNode(leftEar)
-        
-        let rightEar = SCNNode(geometry: earGeo)
-        rightEar.name = "RightEar"
-        rightEar.position = SCNVector3(0.32, 0.49, 0.05)
-        rightEar.eulerAngles = SCNVector3(0, 0, -0.28)
-        rightEar.simdScale.z = 0.62
-        headNode.addChildNode(rightEar)
-        
-        let innerEarGeo = SCNCone(topRadius: 0.01, bottomRadius: 0.11, height: 0.26)
-        innerEarGeo.firstMaterial = pinkMaterial
-        let leftInner = SCNNode(geometry: innerEarGeo)
-        leftInner.position = SCNVector3(0, -0.01, 0.085)
-        leftEar.addChildNode(leftInner)
-        
-        let rightInner = SCNNode(geometry: innerEarGeo)
-        rightInner.position = leftInner.position
-        rightEar.addChildNode(rightInner)
-        
-        let earTwitch = SCNAction.sequence([
-            SCNAction.wait(duration: 4.5),
-            SCNAction.rotateBy(x: 0, y: 0, z: -0.18, duration: 0.08),
-            SCNAction.rotateBy(x: 0, y: 0, z: 0.18, duration: 0.08)
-        ])
-        leftEar.runAction(SCNAction.repeatForever(earTwitch))
-        
-        // --- ГАРДЕРОБ 1: ЧЕРНЫЕ КИБЕР-ОЧКИ ---
-        let outfitGlasses = SCNNode()
-        outfitGlasses.name = "Outfit_Glasses"
-        let glassesGeo = SCNBox(width: 0.76, height: 0.22, length: 0.14, chamferRadius: 0.04)
-        glassesGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 0.95)
-        glassesGeo.firstMaterial?.metalness.contents = 0.9
-        let glassesBase = SCNNode(geometry: glassesGeo)
-        glassesBase.position = SCNVector3(0, 0.07, 0.49)
-        outfitGlasses.addChildNode(glassesBase)
-        
-        let neonStripGeo = SCNBox(width: 0.72, height: 0.025, length: 0.15, chamferRadius: 0.01)
-        neonStripGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
-        neonStripGeo.firstMaterial?.emission.contents = UIColor.systemCyan
-        let neonNode = SCNNode(geometry: neonStripGeo)
-        neonNode.position = SCNVector3(0, 0.12, 0.50)
-        outfitGlasses.addChildNode(neonNode)
-        headNode.addChildNode(outfitGlasses)
-        
-        // --- ГАРДЕРОБ 2: КОЖАНАЯ КЕПКА ---
-        let outfitCap = SCNNode()
-        outfitCap.name = "Outfit_Cap"
-        let capDomeGeo = SCNSphere(radius: 0.38)
-        capDomeGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.12, green: 0.08, blue: 0.06, alpha: 1.0)
-        let capDome = SCNNode(geometry: capDomeGeo)
-        capDome.position = SCNVector3(0, 0.44, 0.02)
-        capDome.scale = SCNVector3(1.1, 0.5, 1.1)
-        outfitCap.addChildNode(capDome)
-        
-        let capVisorGeo = SCNBox(width: 0.52, height: 0.03, length: 0.32, chamferRadius: 0.01)
-        capVisorGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.16, green: 0.10, blue: 0.08, alpha: 1.0)
-        let capVisor = SCNNode(geometry: capVisorGeo)
-        capVisor.position = SCNVector3(0, 0.36, 0.38)
-        capVisor.eulerAngles = SCNVector3(0.25, 0, 0)
-        outfitCap.addChildNode(capVisor)
-        outfitCap.isHidden = true
-        headNode.addChildNode(outfitCap)
-        
-        // --- ТЕЛО И ОШЕЙНИК ---
-        let bodyGeo = SCNCapsule(capRadius: 0.44, height: 0.98)
-        bodyGeo.firstMaterial = furMaterial
-        let bodyNode = SCNNode(geometry: bodyGeo)
-        bodyNode.name = "Body"
-        bodyNode.position = SCNVector3(0, 0.52, -0.05)
-        breatheNode.addChildNode(bodyNode)
-        
-        let bibGeo = SCNSphere(radius: 0.32)
-        bibGeo.firstMaterial = furWhiteMaterial
-        let bibNode = SCNNode(geometry: bibGeo)
-        bibNode.name = "Bib"
-        bibNode.position = SCNVector3(0, 0.62, 0.22)
-        bibNode.scale = SCNVector3(0.8, 1.1, 0.5)
-        breatheNode.addChildNode(bibNode)
-        
-        let collarGeo = SCNCylinder(radius: 0.36, height: 0.04)
-        collarGeo.firstMaterial?.diffuse.contents = UIColor.systemRed
-        let collarNode = SCNNode(geometry: collarGeo)
-        collarNode.name = "Collar"
-        collarNode.position = SCNVector3(0, 0.88, 0.02)
-        breatheNode.addChildNode(collarNode)
-        
-        let bellGeo = SCNSphere(radius: 0.06)
-        bellGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
-        bellGeo.firstMaterial?.metalness.contents = 0.95
-        let bellNode = SCNNode(geometry: bellGeo)
-        bellNode.name = "Bell"
-        bellNode.position = SCNVector3(0, 0.84, 0.38)
-        breatheNode.addChildNode(bellNode)
-        
-        // --- ГАРДЕРОБ 3: НЕОНОВЫЙ ХУДИ ---
-        let outfitHoodie = SCNNode()
-        outfitHoodie.name = "Outfit_Hoodie"
-        let hoodieGeo = SCNCapsule(capRadius: 0.46, height: 1.02)
-        hoodieGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.05, green: 0.15, blue: 0.25, alpha: 1.0)
-        let hoodieBody = SCNNode(geometry: hoodieGeo)
-        hoodieBody.position = SCNVector3(0, 0.52, -0.05)
-        outfitHoodie.addChildNode(hoodieBody)
-        
-        let hoodieTrimGeo = SCNTorus(ringRadius: 0.38, pipeRadius: 0.03)
-        hoodieTrimGeo.firstMaterial?.diffuse.contents = UIColor.systemCyan
-        hoodieTrimGeo.firstMaterial?.emission.contents = UIColor.systemCyan
-        let hoodieTrim = SCNNode(geometry: hoodieTrimGeo)
-        hoodieTrim.position = SCNVector3(0, 0.92, 0.02)
-        outfitHoodie.addChildNode(hoodieTrim)
-        outfitHoodie.isHidden = true
-        breatheNode.addChildNode(outfitHoodie)
-        
-        // --- ГАРДЕРОБ 4: ЗОЛОТОЙ КУЛОН-ЛАПКА ---
-        let outfitPendant = SCNNode()
-        outfitPendant.name = "Outfit_Pendant"
-        let chainGeo = SCNTorus(ringRadius: 0.38, pipeRadius: 0.015)
-        chainGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
-        chainGeo.firstMaterial?.metalness.contents = 0.95
-        let chainNode = SCNNode(geometry: chainGeo)
-        chainNode.position = SCNVector3(0, 0.86, 0.02)
-        outfitPendant.addChildNode(chainNode)
-        
-        let medalGeo = SCNCylinder(radius: 0.10, height: 0.02)
-        medalGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
-        medalGeo.firstMaterial?.metalness.contents = 0.95
-        let medalNode = SCNNode(geometry: medalGeo)
-        medalNode.position = SCNVector3(0, 0.72, 0.38)
-        medalNode.eulerAngles = SCNVector3(Float.pi / 2.0, 0, 0)
-        outfitPendant.addChildNode(medalNode)
-        outfitPendant.isHidden = true
-        breatheNode.addChildNode(outfitPendant)
-        
-        // ЛАПКИ
-        let tailRoot = SCNNode()
-        tailRoot.name = "TailRoot"
-        tailRoot.position = SCNVector3(0, 0.28, -0.42)
-        
-        let curve: [SIMD3<Float>] = [[0,0,0], [0.19,-0.10,-0.17], [0.42,-0.13,-0.22],
-                                     [0.57,-0.03,-0.16], [0.64,0.16,-0.09], [0.61,0.30,0]]
-        for i in 1..<curve.count {
-            let delta = curve[i] - curve[i - 1]
-            let radius = 0.087 - Float(i) * 0.005
-            let segment = SCNNode(geometry: SCNCapsule(capRadius: CGFloat(radius),
-                                                     height: CGFloat(simd_length(delta) + 2 * radius)))
-            segment.geometry?.firstMaterial = i == curve.count - 1 ? stripe : furMaterial
-            segment.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(delta))
-            segment.simdPosition = (curve[i] + curve[i - 1]) * 0.5
-            tailRoot.addChildNode(segment)
-        }
-        breatheNode.addChildNode(tailRoot)
-        
         let traveller = SCNNode()
+        traveller.eulerAngles.y = -0.54
         traveller.addChildNode(catRoot)
-        rootNode.addChildNode(traveller)
+        let petSpace = SCNNode()
+        let scale: Float = inRoom ? CatRoomScenery.kittenScale : 1
+        petSpace.simdScale = SIMD3(repeating: scale)
+        rootNode.addChildNode(petSpace)
+        petSpace.addChildNode(traveller)
         context.coordinator.traveller = traveller
         if inRoom {
-            let toy = SCNNode(geometry: SCNSphere(radius: 0.072))
-            toy.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
+            let sphere = SCNSphere(radius: CGFloat(CatBallGame.radius))
+            let yarn = SCNMaterial()
+            yarn.diffuse.contents = UIColor(red: 0.82, green: 0.41, blue: 0.22, alpha: 1)
+            sphere.firstMaterial = yarn
+            let toy = SCNNode(geometry: sphere)
+            let yarnBand = SCNMaterial()
+            yarnBand.diffuse.contents = UIColor(red: 0.96, green: 0.76, blue: 0.46, alpha: 1)
+            for angle: Float in [0.23, 0.36, 1.82] {
+                let loop = SCNTorus(ringRadius: CGFloat(CatBallGame.radius), pipeRadius: 0.0025)
+                loop.firstMaterial = yarnBand
+                let stripe = SCNNode(geometry: loop)
+                stripe.eulerAngles.z = angle
+                toy.addChildNode(stripe)
+            }
             toy.isHidden = true
-            rootNode.addChildNode(toy)
+            petSpace.addChildNode(toy)
             context.coordinator.toy = toy
+            context.coordinator.view = scnView
+            scnView.updateFraming = { [weak coordinator = context.coordinator] in coordinator?.frameCamera(dt: nil) }
         }
-        context.coordinator.rig = CatMotionRig(cat: catRoot, torso: breatheNode, head: headNode,
-                                               tail: tailRoot, fur: furMaterial)
         context.coordinator.startClock()
         
         // ЖЕСТЫ: Поглаживание (Pan) и Тап (Tap)
@@ -397,7 +175,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         let coordinator = context.coordinator
         coordinator.parent = self
-        let animate = isVisible && scenePhase == .active && !reduceMotion
+        let animate = isVisible && scenePhase == .active && !reduceMotion && !lessonPaused
         uiView.isPlaying = animate
         uiView.rendersContinuously = animate
         coordinator.clock?.isPaused = !animate
@@ -409,37 +187,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
             mood == "😻" ? .purr :
             mood == "🐟" ? .eat : mood == "💻" ? .computer :
             action == .play || mood == "🧶" ? .play : speech.isSpeaking ? .talk : .idle)
-        let asleep = motion == .sleep
-        if coordinator.wasAsleep != asleep || coordinator.reduced != reduceMotion {
-            context.coordinator.wasAsleep = asleep
-            coordinator.reduced = reduceMotion
-            for name in ["LeftEye", "RightEye"] {
-                guard let eye = cat.childNode(withName: name, recursively: true) else { continue }
-                eye.removeAction(forKey: "blink")
-                eye.scale = SCNVector3(1, asleep ? 0.08 : 1, 1)
-                if !asleep && !reduceMotion {
-                    let blink = SCNAction.sequence([
-                        .wait(duration: mood == "😻" ? 1.5 : 3.5),
-                        scaleAction(to: SCNVector3(1, 0.1, 1), duration: 0.08),
-                        scaleAction(from: SCNVector3(1, 0.1, 1), to: SCNVector3(1, 1, 1), duration: 0.12)
-                    ])
-                    eye.runAction(.repeatForever(blink), forKey: "blink")
-                }
-            }
-        }
-        if let mouth = cat.childNode(withName: "Mouth", recursively: true) {
-            let movesMouth = !reduceMotion && !asleep && (speech.isSpeaking || motion == .eat || motion == .groom)
-            if movesMouth && mouth.action(forKey: "talk") == nil {
-                mouth.runAction(.repeatForever(.sequence([
-                    scaleAction(from: SCNVector3(0.7, 0.18, 0.3), to: SCNVector3(0.7, 0.8, 0.3), duration: 0.14),
-                    scaleAction(from: SCNVector3(0.7, 0.8, 0.3), to: SCNVector3(0.7, 0.18, 0.3), duration: 0.16)
-                ])), forKey: "talk")
-            } else if !movesMouth {
-                mouth.removeAction(forKey: "talk")
-                mouth.scale = SCNVector3(0.7, 0.18, 0.3)
-            }
-        }
-
         // 1. Обновляем визуальный гардероб в 3D
         updateOutfitVisibility(in: cat, currentOutfit: actionHandler.state.currentOutfit, isDressed: actionHandler.state.isDressed)
         
@@ -451,72 +198,105 @@ public struct Cat3DSceneView: UIViewRepresentable {
             cat.simdPosition = .zero
             cat.simdEulerAngles = .zero
             cat.simdScale = [1, 1, 1]
+            coordinator.resetGame()
             if requestedMotion == nil && !reduceMotion && (action == .somersault || action == .hangOnIsland || action == .dressUp) {
                 executeCatAction(cat: cat, action: action)
             }
         }
+        let poseChanged = coordinator.baseMotion != motion
         coordinator.baseMotion = motion
         if !animate {
-            coordinator.rig?.set(motion, reduced: true)
+            if !lessonPaused || poseChanged { coordinator.rig?.set(motion, reduced: true) }
+            if reduceMotion { coordinator.showStillBall(playing: motion == .play) }
             uiView.setNeedsDisplay()
         }
     }
     
     // Переключение реальных 3D элементов одежды
     private func updateOutfitVisibility(in cat: SCNNode, currentOutfit: String?, isDressed: Bool) {
-        let glasses = cat.childNode(withName: "Outfit_Glasses", recursively: true)
-        let hoodie = cat.childNode(withName: "Outfit_Hoodie", recursively: true)
-        let cap = cat.childNode(withName: "Outfit_Cap", recursively: true)
-        let pendant = cat.childNode(withName: "Outfit_Pendant", recursively: true)
-        let collar = cat.childNode(withName: "Collar", recursively: true)
-        let bell = cat.childNode(withName: "Bell", recursively: true)
-        
-        guard isDressed, let outfit = currentOutfit else {
-            // Естественная шубка: всё снято
-            glasses?.isHidden = true
-            hoodie?.isHidden = true
-            cap?.isHidden = true
-            pendant?.isHidden = true
-            collar?.isHidden = false
-            bell?.isHidden = false
-            return
+        let worn = isDressed ? CatGarment.matching(currentOutfit) : []
+        for garment in CatGarment.allCases {
+            cat.childNode(withName: garment.rawValue, recursively: true)?.isHidden = !worn.contains(garment)
         }
-        
-        glasses?.isHidden = !outfit.contains("очки")
-        hoodie?.isHidden = !outfit.contains("худи")
-        cap?.isHidden = !outfit.contains("кепка")
-        pendant?.isHidden = !outfit.contains("кулон")
-        
-        // Под худи ошейник прячется
-        collar?.isHidden = outfit.contains("худи")
-        bell?.isHidden = outfit.contains("худи")
     }
-    
-    private static let furTexture: UIImage = {
-        let size = CGSize(width: 512, height: 512)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { context in
-            UIColor(red: 0.39, green: 0.42, blue: 0.46, alpha: 1).setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-            let cg = context.cgContext
-            cg.setLineWidth(0.6)
-            var seed: UInt32 = 107
-            func coordinate() -> CGFloat {
-                seed = seed &* 1664525 &+ 1013904223
-                return CGFloat(seed >> 16) / 128
-            }
-            for index in 0..<6000 {
-                let x = coordinate()
-                let y = coordinate()
-                let light = CGFloat(index % 7) / 30 + 0.3
-                cg.setStrokeColor(UIColor(white: light, alpha: 0.5).cgColor)
-                cg.move(to: CGPoint(x: x, y: y))
-                cg.addLine(to: CGPoint(x: x + CGFloat(index % 5) - 2, y: y + 7))
-                cg.strokePath()
-            }
+    private static func installOutfits(on cat: SCNNode) {
+        guard let head = cat.childNode(withName: "head", recursively: true),
+              let neck = cat.childNode(withName: "neck", recursively: true),
+              let chest = cat.childNode(withName: "chest", recursively: true) else { return }
+        func item(_ name: String, on parent: SCNNode) -> SCNNode {
+            let group = SCNNode()
+            group.name = name
+            group.isHidden = true
+            parent.addChildNode(group)
+            return group
         }
-    }()
+        func piece(_ mesh: SCNGeometry, color: UIColor, at position: SIMD3<Float>, in parent: SCNNode) -> SCNNode {
+            let m = SCNMaterial()
+            m.diffuse.contents = color
+            mesh.firstMaterial = m
+            let node = SCNNode(geometry: mesh)
+            node.simdPosition = position
+            parent.addChildNode(node)
+            return node
+        }
+        let glasses = item(CatGarment.glasses.rawValue, on: head)
+        for side: Float in [-1, 1] {
+            let rim = piece(SCNTorus(ringRadius: 0.099, pipeRadius: 0.009), color: .darkGray,
+                            at: [side*0.15, 0.067, 0.295], in: glasses)
+            rim.simdEulerAngles = [.pi/2, 0, -side*0.24]
+        }
+        _ = piece(SCNBox(width: 0.11, height: 0.014, length: 0.016, chamferRadius: 0.005),
+                  color: .darkGray, at: [0,0.067,0.31], in: glasses)
+        let cap = item(CatGarment.cap.rawValue, on: head)
+        let leather = UIColor(red: 0.26, green: 0.15, blue: 0.09, alpha: 1)
+        let crown = piece(SCNSphere(radius: 0.20), color: leather, at: [0,0.26,0], in: cap)
+        crown.simdScale = [1,0.40,1.04]
+        let brim = piece(SCNSphere(radius: 0.17), color: leather, at: [0,0.235,0.14], in: cap)
+        brim.simdScale = [1,0.09,0.84]
+        let hoodie = item(CatGarment.hoodie.rawValue, on: chest)
+        let hood = piece(SCNTorus(ringRadius: 0.21, pipeRadius: 0.045), color: .systemTeal,
+                         at: [0,0.14,0.17], in: hoodie)
+        hood.eulerAngles.x = -0.53
+        let garment = piece(SCNSphere(radius: 1), color: .systemTeal, at: [0,-0.013,-0.01], in: hoodie)
+        garment.simdScale = [0.28,0.315,0.31]
+        let pendant = item(CatGarment.pendant.rawValue, on: neck)
+        let band = piece(SCNTorus(ringRadius: 0.224, pipeRadius: 0.012), color: .brown,
+                         at: [0,0.055,0.037], in: pendant)
+        band.eulerAngles.x = -0.56
+        let tag = piece(SCNSphere(radius: 0.038), color: .systemYellow, at: [0,-0.035,0.256], in: pendant)
+        tag.simdScale.z = 0.36
+        let berry = UIColor(red: 0.54, green: 0.15, blue: 0.29, alpha: 1)
+        let amber = UIColor(red: 0.87, green: 0.60, blue: 0.23, alpha: 1)
+        let beret = item(CatGarment.beret.rawValue, on: head)
+        let felt = piece(SCNSphere(radius: 1), color: berry, at: [-0.035,0.28,0.03], in: beret)
+        felt.simdScale = [0.236,0.072,0.19]
+        felt.eulerAngles.z = 0.16
+        _ = piece(SCNCapsule(capRadius: 0.011, height: 0.042), color: berry, at: [-0.05,0.355,0.032], in: beret)
+        let readers = item(CatGarment.readers.rawValue, on: head)
+        for side: Float in [-1,1] {
+            let rim = piece(SCNTorus(ringRadius: 0.093, pipeRadius: 0.007), color: amber,
+                            at: [side*0.147,0.060,0.30], in: readers)
+            rim.simdEulerAngles = [.pi/2,0,-side*0.27]
+        }
+        _ = piece(SCNBox(width: 0.116, height: 0.009, length: 0.012, chamferRadius: 0.004),
+                  color: amber, at: [0,0.065,0.316], in: readers)
+        let bow = item(CatGarment.bow.rawValue, on: neck)
+        let ribbon = piece(SCNTorus(ringRadius: 0.223, pipeRadius: 0.014), color: berry,
+                           at: [0,0.049,0.042], in: bow)
+        ribbon.eulerAngles.x = -0.56
+        for side: Float in [-1,1] {
+            let wing = piece(SCNCone(topRadius: 0.046, bottomRadius: 0.012, height: 0.076), color: berry,
+                             at: [side*0.043,-0.041,0.254], in: bow)
+            wing.eulerAngles.z = -side * .pi/2
+        }
+        _ = piece(SCNSphere(radius: 0.022), color: amber, at: [0,-0.041,0.264], in: bow)
+        let vest = item(CatGarment.vest.rawValue, on: chest)
+        let wool = piece(SCNSphere(radius: 1), color: amber, at: [0,-0.022,-0.054], in: vest)
+        wool.simdScale = [0.29,0.309,0.36]
+        for offset: Float in [0.00,-0.077] {
+            _ = piece(SCNSphere(radius: 0.016), color: .brown, at: [0,offset,0.304], in: vest)
+        }
+    }
 
     private func scaleAction(from start: SCNVector3 = SCNVector3(1, 1, 1),
                              to end: SCNVector3, duration: TimeInterval) -> SCNAction {
@@ -589,6 +369,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         view.rendersContinuously = false
         view.scene = nil
         coordinator.clock?.invalidate()
+        CatPurrFeedback.shared.stop()
         coordinator.rig = nil
     }
     
@@ -599,30 +380,66 @@ public struct Cat3DSceneView: UIViewRepresentable {
     @MainActor
     public class Coordinator: NSObject {
         var parent: Cat3DSceneView
-        var wasAsleep: Bool?
-        var reduced = false
         var rig: CatMotionRig?
         weak var traveller: SCNNode?
         weak var toy: SCNNode?
+        weak var view: SCNView?
+        private var game = CatBallGame()
+        private var focusX: Float = 0
+        private var fieldWidth: Float = 3.20
         var clock: CADisplayLink?
         var baseMotion: CatMotion = .idle {
             didSet {
                 if baseMotion != oldValue {
+                    holdingCat = false
                     destination = nil
-                    toy?.isHidden = true
+                    resetGame()
                     rest = 2.5
                 }
             }
         }
         private var destination: SIMD2<Float>?
         private var rest: Float = 2.5
+        private var speed: Float = 0
         private var previousFrame: CFTimeInterval?
         private var holdingCat = false
         var lastExecutedToken: String = ""
-        private var lastHapticTime: TimeInterval = 0
+        private var lastStroke: TimeInterval = 0
         private var lastPetTime: TimeInterval = 0
         
         init(_ parent: Cat3DSceneView) { self.parent = parent }
+
+        func resetGame() {
+            game.stop()
+            toy?.isHidden = true
+        }
+
+        func showStillBall(playing: Bool) {
+            resetGame()
+            guard playing, let traveller, let toy else { return }
+            let p = traveller.simdConvertPosition([0.16,CatBallGame.radius,0.72], to: toy.parent)
+            toy.simdPosition = p
+            toy.isHidden = false
+        }
+
+        func frameCamera(dt: Float?) {
+            guard let view, let cameraNode = view.pointOfView, let camera = cameraNode.camera,
+                  let traveller, view.bounds.height > 0, view.bounds.width > 0 else { return }
+            let catX = traveller.simdWorldPosition.x
+            let ballX = game.ball.x * CatRoomScenery.kittenScale
+            let playing = game.phase != .idle
+            let desiredX = playing ? catX * 0.38 + ballX * 0.15 : catX * 0.4
+            let alpha = dt.map { 1 - exp(-3 * $0) } ?? 1
+            focusX += (desiredX - focusX) * alpha
+            let desiredWidth: Float = playing ? 4.20 : 3.20
+            fieldWidth += (desiredWidth - fieldWidth) * alpha
+            var half = max(fieldWidth / 2, abs(catX - focusX) + 1.47 * CatRoomScenery.kittenScale)
+            if playing { half = max(half, abs(ballX - focusX) + 0.22) }
+            let aspect = Float(view.bounds.width / view.bounds.height)
+            camera.fieldOfView = CGFloat(2 * atan(max(1.48, half/aspect) / 5.5) * 180 / Float.pi)
+            cameraNode.simdPosition = [focusX,2.20,6.30]
+            cameraNode.look(at: SCNVector3(focusX,1.02,0))
+        }
 
         func startClock() {
             let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
@@ -636,7 +453,30 @@ public struct Cat3DSceneView: UIViewRepresentable {
             previousFrame = link.timestamp
             guard let rig, let traveller else { return }
             var motion = baseMotion
-            if parent.inRoom && parent.requestedMotion == nil && baseMotion != .sleep && !holdingCat {
+            var strideRate: Float = 1
+            let position = SIMD2<Float>(traveller.simdPosition.x, traveller.simdPosition.z)
+            if parent.inRoom && baseMotion == .play && game.phase == .idle && !holdingCat {
+                game.start(at: position, facing: traveller.eulerAngles.y, repeats: true)
+            }
+            if game.phase != .idle, let toy {
+                let before = game.ball
+                if !holdingCat { game.advance(by: dt) }
+                let delta = game.ball - before
+                if simd_length_squared(delta) > 0.00000001 {
+                    let axis = simd_normalize(SIMD3<Float>(delta.y,0,-delta.x))
+                    toy.simdOrientation = simd_quatf(angle: simd_length(delta) / CatBallGame.radius, axis: axis) * toy.simdOrientation
+                }
+                toy.simdPosition = [game.ball.x,CatBallGame.radius,game.ball.y]
+                toy.isHidden = game.phase == .idle
+                traveller.simdPosition = [game.position.x,0,game.position.y]
+                traveller.eulerAngles.y = game.heading
+                switch game.phase {
+                case .chasing: motion = .trot
+                case .batting: motion = .play
+                case .rollingAway, .idle: motion = .idle
+                }
+                strideRate = game.strideRate
+            } else if parent.inRoom && parent.requestedMotion == nil && baseMotion != .sleep && !holdingCat {
                 rest -= dt
                 if destination == nil && rest <= 0 && parent.isRoaming &&
                     [.idle, .groom, .play, .computer].contains(baseMotion) {
@@ -644,7 +484,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
                     destination = [x, Float.random(in: -0.44...0.16)]
                 }
                 if let target = destination {
-                    let position = SIMD2<Float>(traveller.simdPosition.x, traveller.simdPosition.z)
                     let offset = target - position
                     let distance = simd_length(offset)
                     if distance < 0.025 {
@@ -657,14 +496,27 @@ public struct Cat3DSceneView: UIViewRepresentable {
                         let heading = atan2(direction.x, direction.y)
                         turn(traveller, to: heading, step: dt)
                         let alignment = max(0, cos(heading - traveller.eulerAngles.y))
-                        let next = position + direction * min(distance, dt * 0.58 * alignment)
+                        let desiredSpeed = min(0.58, sqrt(2 * 1.6 * distance)) * alignment
+                        speed += max(-2.4 * dt, min(1.6 * dt, desiredSpeed - speed))
+                        let step = min(distance, dt * speed)
+                        strideRate = dt > 0 ? step / (dt * 0.58) : 0
+                        let next = position + direction * step
                         traveller.simdPosition = [next.x, 0, next.y]
                     }
                 }
             }
-            if motion != .walk { turn(traveller, to: 0, step: dt) }
+            if motion != .walk && game.phase == .idle {
+                speed = 0
+                if motion != .sleep {
+                    let sideView = motion == .computer || motion == .eat || motion.isExercise
+                    turn(traveller, to: sideView ? -1.10 : -0.54, step: dt)
+                }
+            }
+            if parent.requestedMotion == .walk { turn(traveller, to: -1.10, step: dt) }
+            if holdingCat { motion = .purr }
             rig.set(motion, reduced: false)
-            rig.advance(by: dt)
+            rig.advance(by: dt, strideRate: strideRate, breathPhase: parent.breathStep?.phase(at: Date()))
+            frameCamera(dt: dt)
         }
 
         private func turn(_ node: SCNNode, to angle: Float, step: Float) {
@@ -689,21 +541,25 @@ public struct Cat3DSceneView: UIViewRepresentable {
             guard dy < -0.001 else { return }
             let t = -near.y / dy
             guard (0...1).contains(t) else { return }
-            let x = min(0.70, max(-0.70, near.x + (far.x - near.x) * t))
-            let z = min(0.22, max(-0.50, near.z + (far.z - near.z) * t))
-            destination = [x, z]
-            toy?.simdPosition = [x, 0.075, z]
-            toy?.isHidden = false
+            let target = SIMD2(near.x + (far.x - near.x) * t, near.z + (far.z - near.z) * t)
+            guard abs(target.x) <= 2.55, (-1.47...1.57).contains(target.y), let traveller else { return }
+            destination = nil
+            if game.phase == .idle {
+                game.start(at: SIMD2(traveller.simdPosition.x, traveller.simdPosition.z),
+                           facing: traveller.eulerAngles.y, target: target / CatRoomScenery.kittenScale,
+                           repeats: baseMotion == .play)
+            } else { game.throwBall(towards: target / CatRoomScenery.kittenScale) }
         }
         
         // ПОГЛАЖИВАНИЕ СВАЙПОМ: плавное мурчание и тактильный отклик
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            guard parent.inRoom, let view = gesture.view as? SCNView else { return }
+            guard parent.inRoom, parent.requestedMotion == nil, let view = gesture.view as? SCNView else { return }
             let point = gesture.location(in: view)
             if gesture.state == .began {
                 // UIKit recognises a pan after movement. Hit-test the initial contact.
                 let translation = gesture.translation(in: view)
                 holdingCat = hitsCat(CGPoint(x: point.x - translation.x, y: point.y - translation.y), in: view)
+                if holdingCat { resetGame() }
             }
             guard holdingCat else {
                 if gesture.state == .began || gesture.state == .changed { moveToy(to: point, in: view) }
@@ -714,13 +570,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
             if gesture.state == .cancelled || gesture.state == .failed {
                 holdingCat = false
                 rig?.gaze = .zero
+                CatPurrFeedback.shared.stop()
                 return
             }
             let now = Date().timeIntervalSince1970
-            if now - lastHapticTime > 0.12 {
-                lastHapticTime = now
-                let softHaptic = UIImpactFeedbackGenerator(style: .soft)
-                softHaptic.impactOccurred(intensity: 0.7)
+            if gesture.state == .began || (gesture.state == .changed && now - lastStroke > 0.12) {
+                lastStroke = now
+                CatPurrFeedback.shared.respond(for: 0.48)
             }
             
             if gesture.state == .ended {
@@ -735,7 +591,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         
         // ТАП: быстрое почесывание за ушком
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-            guard parent.inRoom, let view = gesture.view as? SCNView else { return }
+            guard parent.inRoom, parent.requestedMotion == nil, let view = gesture.view as? SCNView else { return }
             let point = gesture.location(in: view)
             if !hitsCat(point, in: view) {
                 moveToy(to: point, in: view)
