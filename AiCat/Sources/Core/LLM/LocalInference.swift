@@ -96,7 +96,6 @@ actor LocalInference {
         configuration.startingImage = startingImage
         configuration.strength = startingImage == nil ? 1 : 0.55
         configuration.stepCount = 28
-        configuration.schedulerType = .dpmppScheduler
         configuration.negativePrompt = "compression artifacts, duplicate limbs, malformed anatomy"
         configuration.seed = UInt32.random(in: 0..<UInt32.max)
         let images = try pipeline.generateImages(configuration: configuration)
