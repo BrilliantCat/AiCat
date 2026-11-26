@@ -22,6 +22,10 @@ public struct MainView: View {
     @StateObject private var liveActivity = LiveActivityManager.shared
     @State private var showClearChat = false
     @State private var lastPet = Date.distantPast
+    @AppStorage("aicat.autoChat") private var automaticChat = false
+    @AppStorage("aicat.hordeConsent") private var hordeConsent = false
+    @State private var askForOnline = false
+    @State private var hideRequest = 0
     @State private var inRoom = true
     
     @FocusState private var isInputFocused: Bool
@@ -37,7 +41,7 @@ public struct MainView: View {
                                     Color(red: 0.13, green: 0.10, blue: 0.20),
                                     Color(red: 0.04, green: 0.07, blue: 0.12)],
                            startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            Circle().fill(Color.teal.opacity(0.16)).frame(width: 280).blur(radius: 70).offset(x: -130, y: -250)
+
             
             VStack(spacing: 0) {
                 // 1. Верхняя панель управления
@@ -64,11 +68,17 @@ public struct MainView: View {
                 }
                 
                 if inRoom {
-                    Cat3DSceneView(motion: catMotion, inRoom: true, isRoaming: tamagotchi.isRoaming,
-                                   lessonPaused: yogaCoach.isPaused || fitnessCoach.isPaused,
-                                   breathStep: yogaCoach.breathStep,
-                                   isVisible: !showWardrobe && !showMediaStudio && !showModelManager &&
+                    Group {
+                        if (fitnessCoach.isWorkoutActive || yogaCoach.isSessionActive), let pose = catMotion {
+                            LessonDemonstration(motion: pose, paused: yogaCoach.isPaused || fitnessCoach.isPaused,
+                                                breath: yogaCoach.breathStep)
+                        } else {
+                            Cat3DSceneView(motion: catMotion, inRoom: true, isRoaming: tamagotchi.isRoaming,
+                                           hideRequest: hideRequest,
+                                           isVisible: !showWardrobe && !showMediaStudio && !showModelManager &&
                                        !showDebugLog && !showRAGManager && !showPhoneControl)
+                        }
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                         .padding(.horizontal, 8)
@@ -88,6 +98,8 @@ public struct MainView: View {
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { _, phase in if phase != .active { CatPurrFeedback.shared.stop() } }
         .onChange(of: speechSynthesizer.isVoiceEnabled) { _, enabled in if !enabled { CatPurrFeedback.shared.stop() } }
+        .onChange(of: speechSynthesizer.preferredVoiceID) { _, _ in previewVoice() }
+        .onChange(of: speechSynthesizer.tone) { _, _ in previewVoice() }
         .onChange(of: speechSynthesizer.isSpeaking) { _, speaking in if speaking { CatPurrFeedback.shared.stop() } }
         .onChange(of: fitnessCoach.isWorkoutActive) { _, active in if active { inRoom = true } }
         .onChange(of: yogaCoach.isSessionActive) { _, active in if active { inRoom = true } }
@@ -113,7 +125,7 @@ public struct MainView: View {
                 chatMessages = ChatStorage.shared.loadMessages()
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isInputFocused)
+
         .sheet(isPresented: $showWardrobe) {
             WardrobeSheet()
         }
@@ -127,6 +139,12 @@ public struct MainView: View {
         .sheet(isPresented: $showMediaStudio) { MediaStudioView() }
         .sheet(isPresented: $showDebugLog) {
             DebugLogView()
+        }
+        .alert("Включить онлайн-ответы?", isPresented: $askForOnline) {
+            Button("Включить") { hordeConsent = true; automaticChat = true }
+            Button("Оставить офлайн", role: .cancel) {}
+        } message: {
+            Text("AI Horde обрабатывает запросы на компьютерах добровольцев. Туда отправится текст вопроса и до четырёх последних текстовых реплик онлайн-чата. При недоступности сервиса ответит AiCat на телефоне.")
         }
         .alert(isPresented: $showCertificateInfo) {
             Alert(
@@ -190,6 +208,12 @@ public struct MainView: View {
                             Text(voice.name).tag(voice.identifier)
                         }
                     }
+                    if speechSynthesizer.russianVoices.count == 1 { Text("На iPhone установлен один русский голос") }
+                    Picker("Тембр", selection: $speechSynthesizer.tone) {
+                        Text("Мягкий").tag("soft")
+                        Text("Бархатный").tag("deep")
+                        Text("Игривый").tag("bright")
+                    }
                     Button("Послушать голос") {
                         speechSynthesizer.isVoiceEnabled = true
                         speechSynthesizer.speak(text: "Я здесь, кожаный. Рассказывай, как прошёл твой день?")
@@ -198,6 +222,12 @@ public struct MainView: View {
                 Button("Фото и аудио", systemImage: "camera") { showMediaStudio = true }
                 Button("Телефон", systemImage: "iphone") { showPhoneControl = true }
                 Button("Документы", systemImage: "doc.text") { showRAGManager = true }
+                Button(automaticChat ? "Ответы: авто · перейти в офлайн" : "Ответы: офлайн · включить авто") {
+                    if automaticChat { automaticChat = false }
+                    else if hordeConsent { automaticChat = true }
+                    else { askForOnline = true }
+                }
+                .disabled(waitingForReply)
                 Button("Модели", systemImage: "cpu") { showModelManager = true }
                 Button("Диагностика", systemImage: "waveform.path.ecg") { showDebugLog = true }
                 Text(liveActivity.islandStatus)
@@ -328,7 +358,11 @@ public struct MainView: View {
     private var actionChipsBar: some View {
         HStack(spacing: 10) {
             Button { _ = tamagotchi.feedFish() } label: { Label("Кормить", systemImage: "fish") }
-            Button { _ = tamagotchi.play() } label: { Label("Играть", systemImage: "gamecontroller") }
+            Menu {
+                Button("Мячик") { _ = tamagotchi.play() }
+                Button("Прятки") { hideRequest += 1 }
+                    .disabled(catMotion != nil || tamagotchi.isSleeping)
+            } label: { Label("Играть", systemImage: "gamecontroller") }
             Menu {
                 Button("Погладить", systemImage: "hand.draw") { petCompanion() }
                 Button("Умыться") { _ = catHandler.execute(action: "wash") }.disabled(tamagotchi.isSleeping)
@@ -349,6 +383,11 @@ public struct MainView: View {
         .font(.system(.caption, design: .rounded, weight: .medium))
         .buttonStyle(.bordered).tint(.mint)
         .frame(maxWidth: .infinity).padding(.vertical, 6)
+    }
+
+    private func previewVoice() {
+        speechSynthesizer.isVoiceEnabled = true
+        speechSynthesizer.speak(text: "Я здесь, кожаный. Рассказывай, как прошёл твой день?")
     }
 
     private func petCompanion() {
@@ -374,14 +413,9 @@ public struct MainView: View {
             .onTapGesture {
                 isInputFocused = false
             }
-            .onChange(of: isInputFocused) { _, focused in
-                if focused, let last = chatMessages.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-            }
             .onChange(of: chatMessages.count) { _, _ in
                 if let last = chatMessages.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
         }
@@ -434,7 +468,7 @@ public struct MainView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(Color(uiColor: .secondarySystemBackground))
     }
     
     // MARK: - Logic & AI Chat
@@ -451,23 +485,25 @@ public struct MainView: View {
         guard !waitingForReply else { return }
         waitingForReply = true
         LiveActivityManager.shared.startOrUpdateActivity(status: "Думает над ответом", mood: "🤔", action: "Думает", recordAction: false)
+        let history = Array(chatMessages.suffix(4))
+        let useNetwork = automaticChat && hordeConsent
         let userMsg = ChatMessage(sender: .user, text: text)
         chatMessages.append(userMsg)
         ChatStorage.shared.saveMessages(chatMessages)
         
         Task {
-            let (reply, image) = await LLMEngine.shared.generate(prompt: text)
+            let (reply, image, source) = await LLMEngine.shared.conversation(text, history: history, automatic: useNetwork)
             await MainActor.run {
                 self.waitingForReply = false
                 if !yogaCoach.isSessionActive && !fitnessCoach.isWorkoutActive {
                     tamagotchi.refreshAutonomousLife()
                 }
-                self.addCatResponse(reply, image: image)
+                self.addCatResponse(reply, image: image, source: source)
             }
         }
     }
     
-    private func addCatResponse(_ text: String, image: UIImage? = nil) {
+    private func addCatResponse(_ text: String, image: UIImage? = nil, source: String? = nil) {
         var savedName: String? = nil
         if let img = image {
             let name = "\(UUID().uuidString).jpg"
@@ -481,11 +517,12 @@ public struct MainView: View {
             }
         }
         
-        let catMsg = ChatMessage(
+        var catMsg = ChatMessage(
             sender: .cat,
             text: text,
             imageFileName: savedName
         )
+        catMsg.source = source
         chatMessages.append(catMsg)
         ChatStorage.shared.saveMessages(chatMessages)
         
@@ -542,6 +579,7 @@ public struct ChatMessage: Identifiable, Codable {
     public enum Sender: String, Codable { case user, cat }
     public var sender: Sender
     public var text: String
+    var source: String?
     public var imageFileName: String?
     public var imageData: Data?
     
@@ -576,6 +614,7 @@ struct MessageBubble: View {
             if message.sender == .user { Spacer() }
             
             VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
+                if let source = message.source { Text(source).font(.caption2).foregroundStyle(.secondary) }
                 Text(message.text)
                     .font(.body)
                     .foregroundColor(.white)

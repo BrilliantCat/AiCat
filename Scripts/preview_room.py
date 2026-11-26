@@ -51,7 +51,7 @@ def texture(key):
 
 
 def render_room(night, size=(410,520), cat=(0,0), heading=-.54, clip="idle", t=.08, ball=None,
-                frame=None, ball_rotation=None):
+                frame=None, ball_rotation=None, lesson=False, elevation=0):
     w,h=size
     cat=np.array(cat)*KITTEN_SCALE
     if ball is not None: ball=np.array(ball)*KITTEN_SCALE
@@ -60,7 +60,9 @@ def render_room(night, size=(410,520), cat=(0,0), heading=-.54, clip="idle", t=.
     if ball is not None: half=max(half,abs(ball[0]-focus)+.22)
     slope=max(1.48,half*h/w)/5.5
     eye=np.array([focus,2.20,6.30])
-    back=unit(eye-[focus,1.02,0])
+    if lesson:
+        eye=np.array([focus,1.50,3.8]); slope=.38
+    back=unit(eye-[focus,.53 if lesson else 1.02,0])
     right=unit(np.cross([0,1,0],back));up=np.cross(back,right)
     view=np.eye(4);view[:3,:3]=np.stack([right,up,back]);view[:3,3]=-view[:3,:3]@eye
     projection=np.array([[h/w/slope,0,0,0],[0,1/slope,0,0],[0,0,-100.1/99.9,-20/99.9],[0,0,-1,0]])
@@ -77,7 +79,7 @@ def render_room(night, size=(410,520), cat=(0,0), heading=-.54, clip="idle", t=.
     # The kitten pose, coat UVs and skin weights come directly from the packaged model.
     mesh=pose(sample(clip,t) if frame is None else frame)
     rotation=Rotation.from_euler("y",heading).as_matrix()
-    mesh[:,:3]=KITTEN_SCALE*(mesh[:,:3]@rotation.T)+[cat[0],0,cat[1]]
+    mesh[:,:3]=KITTEN_SCALE*(mesh[:,:3]@rotation.T)+[cat[0],elevation,cat[1]]
     mesh[:,3:6]=mesh[:,3:6]@rotation.T
     program["camera"].write(camera)
     # Soft contact beneath the body. SceneKit uses its own directional shadow map on iOS.

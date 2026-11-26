@@ -17,6 +17,10 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         didSet { UserDefaults.standard.set(preferredVoiceID, forKey: "aicat.speechVoice") }
     }
 
+    @Published var tone = UserDefaults.standard.string(forKey: "aicat.voiceTone") ?? "soft" {
+        didSet { UserDefaults.standard.set(tone, forKey: "aicat.voiceTone") }
+    }
+
     var russianVoices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("ru") }.sorted {
             if ($0.gender == .male) != ($1.gender == .male) { return $0.gender == .male }
@@ -29,8 +33,11 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
         let result = AVSpeechUtterance(string: text)
         let voices = russianVoices
         result.voice = voices.first { $0.identifier == preferredVoiceID } ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
-        result.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
-        result.pitchMultiplier = result.voice?.gender == .male ? 0.98 : 0.89
+        switch tone {
+        case "deep": result.rate = AVSpeechUtteranceDefaultSpeechRate * 0.86; result.pitchMultiplier = 0.74
+        case "bright": result.rate = AVSpeechUtteranceDefaultSpeechRate * 1.06; result.pitchMultiplier = 1.16
+        default: result.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96; result.pitchMultiplier = 0.94
+        }
         return result
     }
     private let synthesizer = AVSpeechSynthesizer()

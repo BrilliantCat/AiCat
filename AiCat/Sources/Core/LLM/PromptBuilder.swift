@@ -1,6 +1,11 @@
 import Foundation
 
 public struct PromptBuilder {
+    static func topicDetail(_ text: String) -> String {
+        guard text.lowercased().range(of: "в[ие]жен[её]р", options: .regularExpression) != nil else { return "" }
+        return "\nДля классического шифра Виженера буквы одного повторяющегося ключевого слова задают циклические сдвиги букв текста. Для расшифровки эти сдвиги вычитают."
+    }
+
     static func wordGameInvitation(_ text: String) -> Bool {
         let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
         guard !words.contains("не"), words.contains(where: { ["играть", "играем", "поиграем", "поиграй", "сыграем", "сыграй", "игру"].contains($0) }) else { return false }
@@ -14,7 +19,7 @@ public struct PromptBuilder {
         return ["йошкорола", "йошкарола"].contains(compact) ? "Йошкар-Ола" : nil
     }
 
-    public static func buildSystemPrompt(ragContext: String = "", includeTools: Bool = true) -> String {
+    public static func buildSystemPrompt(ragContext: String = "", includeTools: Bool = true, includeClock: Bool = true) -> String {
         let now = Date()
         let df = DateFormatter()
         df.locale = Locale(identifier: "ru_RU")
@@ -34,11 +39,12 @@ public struct PromptBuilder {
         Пример: «День какой-то тяжёлый» → «Вымотался? Можем просто поболтать. Что больше всего достало сегодня?»
         Пример: «Зачем нужна лампочка?» → «Чтобы вечером не искать всё на ощупь, кожаный. Она превращает электричество в свет.»
         Задавай один уместный вопрос, когда это помогает разговору. Не заканчивай каждый ответ вопросом.
+        Продолжай текущий разговор сразу с ответа. Приветствуй только в ответ на приветствие. Если сомневаешься в факте, обозначь сомнение.
         Помни сказанное в переписке. Не выдумывай совместные события и выполненные действия.
         Кошачьи повадки показывай коротко и изредка. Длинные сценические ремарки и постоянное мурчание не нужны.
         Если чего-то не знаешь, скажи прямо. Можешь честно объяснять свои возможности.
-        Сейчас \(currentDateString), часовой пояс \(timezone).
         """
+        if includeClock { prompt += "\nСейчас \(currentDateString), часовой пояс \(timezone)." }
         if includeTools {
             prompt += """
 

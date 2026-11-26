@@ -141,12 +141,41 @@ final class AiCatTests: XCTestCase {
         XCTAssertEqual(game.phase, .idle)
     }
 
+    func testEveryLessonIncludesAPlayableSheet() throws {
+        for motion in CatMotion.allCases where motion.isExercise || motion == .walk {
+            let path = try XCTUnwrap(Bundle.main.url(forResource: motion.rawValue, withExtension: "jpg", subdirectory: "LivingRoom/Lessons"))
+            let image = try XCTUnwrap(UIImage(contentsOfFile: path.path)?.cgImage)
+            XCTAssertEqual(image.width, 1800, motion.rawValue)
+            XCTAssertEqual(image.height, 1664, motion.rawValue)
+        }
+    }
+
+    func testOnlineChoicePrefersAvailableLargerGeneralModel() throws {
+        let json = #"{"data":[{"id":"gemma-E2B","x_horde":{"workers":2,"queued":0}},{"id":"Qwen-32B","x_horde":{"workers":0,"queued":0}},{"id":"Mistral-24B","x_horde":{"workers":1,"queued":3}}]}"#
+        let models = try JSONDecoder().decode(HordeChat.Catalog.self, from: Data(json.utf8)).data
+        XCTAssertEqual(HordeChat.preferredModel(in: models)?.id, "Mistral-24B")
+        XCTAssertNil(HordeChat.preferredModel(in: Array(models.prefix(2))))
+    }
+
+    func testReplyContinuesPreviousConversation() {
+        let old = [ChatMessage(sender: .user, text: "Поговорим?")]
+        XCTAssertEqual(LLMEngine.continuation("Привет, кожаный! Как прошла прогулка?", after: "Я вернулся", history: old), "Как прошла прогулка?")
+        XCTAssertEqual(LLMEngine.continuation("Привет! Я здесь.", after: "Привет!", history: old), "Привет! Я здесь.")
+    }
+
     func testLivingRoomResourcesInBothLightingConditions() throws {
         for hour in [12, 23] {
             let scene = SCNScene()
             XCTAssertTrue(CatRoomScenery.install(in: scene, hour: hour))
             let room = try XCTUnwrap(scene.rootNode.childNode(withName: "SittingRoom", recursively: false))
             XCTAssertEqual(room.geometry?.elementCount, 6)
+            let light = try XCTUnwrap(scene.rootNode.childNode(withName: "FloorLamp", recursively: false)?.light)
+            CatRoomScenery.toggleLamp(in: scene)
+            XCTAssertEqual(light.intensity, 0)
+            CatRoomScenery.toggleLamp(in: scene)
+            XCTAssertGreaterThan(light.intensity, 0)
+            let window = try XCTUnwrap(room.geometry?.material(named: "window"))
+            XCTAssertEqual(window.diffuse.contentsTransform.m22, -1)
         }
     }
     

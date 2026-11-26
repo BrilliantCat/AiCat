@@ -122,6 +122,14 @@ final class CatMotionRig {
         }
     }()
 
+    func scratch(at time: Float) {
+        for (side, shift) in [("foreL0", Float.zero), ("foreR0", Float.pi)] {
+            if let i = model.bones.firstIndex(of: side) {
+                bones[i].simdOrientation = rotations[i] * simd_quatf(angle: sin(time * 12 + shift) * 0.42, axis: [1,0,0])
+            }
+        }
+    }
+
     func set(_ next: CatMotion, reduced: Bool) {
         if next != motion {
             previous = rotations

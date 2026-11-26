@@ -18,7 +18,7 @@ public struct WardrobeSheet: View {
         NavigationStack {
             VStack(spacing: 0) {
                 Cat3DSceneView(motion: .idle)
-                    .frame(maxWidth: .infinity).frame(height: 165)
+                    .frame(maxWidth: .infinity).frame(height: 235)
                     .accessibilityLabel("Котёнок в выбранных вещах")
                 List {
                     ForEach(CatGarment.Slot.allCases, id: \.self) { slot in

@@ -160,11 +160,17 @@ jobs:
           cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
           app="build/Payload/AiCat.app"
           widget="$app/PlugIns/AiCatWidget.appex"
-          for resource in BritishKitten.mesh BritishKitten.json SilverCoat.png Purr.wav; do
+          for resource in BritishKitten.mesh BritishKitten.json SilverCoat.png Purr.wav Nudge.wav Scratch.wav; do
             test -s "$app/CatModel/$resource" || { echo "::error::Missing CatModel/$resource"; exit 1; }
           done
           for resource in SittingRoom.mesh SittingRoom.json Kilim.jpg Oak.jpg Linen.jpg StreetDay.jpg StreetNight.jpg; do
             test -s "$app/LivingRoom/$resource" || { echo "::error::Missing LivingRoom/$resource"; exit 1; }
+          done
+          for clip in breath curl plank pushUp shoulders squat stretch walk yoga; do
+            test -s "$app/LivingRoom/Lessons/$clip.jpg" || { echo "::error::Missing exercise $clip"; exit 1; }
+          done
+          for state in peek sleep think; do
+            test -s "$widget/AiCat-Visuals/dynamic-island/$state-leading.png"
           done
           for pose in idle purr sleep play eat groom computer peek-leading sleep-leading think-leading; do
             test -s "$widget/AiCat-Visuals/kitten/$pose.png" || { echo "::error::Missing kitten/$pose.png"; exit 1; }

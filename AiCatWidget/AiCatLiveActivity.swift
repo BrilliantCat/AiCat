@@ -15,8 +15,9 @@ struct AiCatLiveActivity: Widget {
     
     public var body: some WidgetConfiguration {
         ActivityConfiguration(for: AiCatAttributes.self) { _ in
-            Color.clear
+            Spacer(minLength: 0)
                 .frame(height: 1)
+                .fixedSize(horizontal: false, vertical: true)
                 .activityBackgroundTint(.clear)
         } dynamicIsland: { context in
             let mood = context.isStale ? "😼" : context.state.moodEmoji
@@ -70,5 +71,6 @@ struct AiCatLiveActivity: Widget {
             }
             .widgetURL(URL(string: "aicat://chat"))
         }
+        .contentMarginsDisabled()
     }
 }

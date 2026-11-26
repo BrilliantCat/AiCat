@@ -12,7 +12,7 @@ public final class LLMEngine: ObservableObject {
     
     // Асинхронный цикл агента: Запрос -> (Поиск RAG) -> Модель / Диспетчер -> Вызов инструмента -> Финальный ответ
     public func generate(prompt: String, context: String = "") async -> (text: String, image: UIImage?) {
-        await MainActor.run { self.isGenerating = true }
+        await MainActor.run { self.isGenerating = true; self.lastToolExecuted = nil }
         defer { Task { @MainActor in self.isGenerating = false } }
         
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -45,18 +45,43 @@ public final class LLMEngine: ObservableObject {
         }
     }
     
-    // Агентский цикл с реальным парсингом JSON вызова инструментов
-    private func runGGUFAgentLoop(userPrompt: String, ragContext: String) async -> (text: String, image: UIImage?) {
+    private func wantsTools(_ userPrompt: String) -> Bool {
         let actionWords = ["напомни", "создай", "запиши", "открой", "включи", "выключи", "нарисуй",
                            "сгенерируй", "переведи", "покорми", "погладь", "поигра", "одень", "переодень",
                            "покажи", "найди", "запусти", "начни", "календар", "напоминани", "статус"]
-        let includeTools = !PromptBuilder.wordGameInvitation(userPrompt) && actionWords.contains { userPrompt.lowercased().contains($0) }
+        return !PromptBuilder.wordGameInvitation(userPrompt) && actionWords.contains { userPrompt.lowercased().contains($0) }
+    }
+
+    func conversation(_ text: String, history: [ChatMessage], automatic: Bool) async -> (String, UIImage?, String) {
+        let localQuestion = await MainActor.run { !RAGTool.shared.searchKnowledge(query: text, topK: 1).isEmpty }
+        if automatic && !localQuestion && directCommand(text) == nil && !wantsTools(text),
+           let reply = await HordeChat.reply(to: text, history: history) {
+            return (Self.continuation(reply.text, after: text, history: history), nil, reply.model)
+        }
+        let reply = await generate(prompt: text)
+        let source = await MainActor.run {
+            ModelManager.shared.isModelLoaded && self.lastToolExecuted == nil ? "Qwen · офлайн" : "AiCat · локально"
+        }
+        return (Self.continuation(reply.text, after: text, history: history), reply.image, source)
+    }
+
+    static func continuation(_ answer: String, after question: String, history: [ChatMessage]) -> String {
+        guard history.contains(where: { $0.sender == .user }),
+              question.range(of: #"(?i)привет|здравств|поздоров|добр(ое|ый) (утро|день|вечер)"#, options: .regularExpression) == nil,
+              let greeting = answer.range(of: #"(?i)^\s*(привет(?:ик)?|здравствуй(?:те)?)(?:,\s*кожаный)?\s*[!.]+\s*"#, options: .regularExpression) else { return answer }
+        let rest = String(answer[greeting.upperBound...])
+        return rest.isEmpty ? answer : rest
+    }
+
+    // Агентский цикл с реальным парсингом JSON вызова инструментов
+    private func runGGUFAgentLoop(userPrompt: String, ragContext: String) async -> (text: String, image: UIImage?) {
+        let includeTools = wantsTools(userPrompt)
         let systemPrompt = PromptBuilder.buildSystemPrompt(ragContext: ragContext, includeTools: includeTools)
         let moodPrompt = await MainActor.run { TamagotchiManager.shared.moodContextPrompt() }
         let history = ChatStorage.shared.loadMessages().dropLast().suffix(12).map {
             (role: $0.sender == .user ? "user" : "assistant", content: String($0.text.prefix(1000)))
         }
-        var fullSystem = systemPrompt + "\n" + moodPrompt
+        var fullSystem = systemPrompt + "\n" + moodPrompt + PromptBuilder.topicDetail(userPrompt)
         if let city = PromptBuilder.placeNameHint(userPrompt) {
             fullSystem += "\nСобеседник, вероятно, имеет в виду город \(city). Учитывай предыдущую реплику."
         }

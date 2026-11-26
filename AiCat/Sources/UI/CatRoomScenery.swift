@@ -33,15 +33,32 @@ enum CatRoomScenery {
             file = night ? "StreetNight" : "StreetDay"
             mat.lightingModel = .constant
         case "shade":
+            mat.name = key
             mat.emission.contents = UIColor(red: night ? 0.52 : 0.15, green: night ? 0.32 : 0.09, blue: 0.045, alpha: 1)
             return mat
         case "matte": return mat
         default: return nil
         }
         guard let url = resource(file, "jpg"), let image = UIImage(contentsOfFile: url.path) else { return nil }
+        mat.name = key
+        if key == "window" {
+            var flip = SCNMatrix4MakeScale(1, -1, 1)
+            flip.m42 = 1
+            mat.diffuse.contentsTransform = flip
+        }
         mat.diffuse.contents = image
         mat.diffuse.mipFilter = .linear
         return mat
+    }
+
+    @discardableResult
+    static func toggleLamp(in scene: SCNScene?) -> Bool? {
+        guard let root = scene?.rootNode, let lamp = root.childNode(withName: "FloorLamp", recursively: false)?.light,
+              let shade = root.childNode(withName: "SittingRoom", recursively: false)?.geometry?.material(named: "shade") else { return nil }
+        let on = lamp.intensity == 0
+        lamp.intensity = on ? 420 : 0
+        shade.emission.contents = on ? UIColor(red: 0.65, green: 0.44, blue: 0.14, alpha: 1) : UIColor.black
+        return on
     }
 
     @discardableResult
@@ -82,6 +99,7 @@ enum CatRoomScenery {
         room.name = "SittingRoom"
         scene.rootNode.addChildNode(room)
         let lamp = SCNNode()
+        lamp.name = "FloorLamp"
         lamp.light = SCNLight()
         lamp.light?.type = .omni
         lamp.light?.color = UIColor(red: 1, green: 0.77, blue: 0.54, alpha: 1)

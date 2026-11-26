@@ -14,6 +14,7 @@ struct CatBallGame {
     private(set) var hits = 0
     private var velocity = SIMD2<Float>.zero
     private var speed: Float = 0
+    var battingProgress: Float { battingTime / 0.56 }
     private var battingTime: Float = 0
     private var repeats = false
     private var approach = SIMD2<Float>(0, 1)
@@ -61,7 +62,7 @@ struct CatBallGame {
         // The playable floor stays the same width when the kitten is resized.
         let scale = CatRoomScenery.kittenScale
         let floor = p * scale
-        return SIMD2(min(1.785, max(-1.785, floor.x)), min(0.86, max(-0.57, floor.y))) / scale
+        return SIMD2(min(2.35, max(-2.35, floor.x)), min(1.95, max(-1.05, floor.y))) / scale
     }
 
     mutating func advance(by dt: Float) {

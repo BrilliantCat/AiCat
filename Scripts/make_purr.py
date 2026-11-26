@@ -18,7 +18,17 @@ air = np.random.default_rng(172).normal(size=t.size)
 freq = np.fft.rfftfreq(t.size, 1 / rate)
 air = np.fft.irfft(np.fft.rfft(air) * np.exp(-((freq - 510) / 210)**2))
 signal = (voice + .4 * air) * (.29 + .71 * np.abs(np.sin(breath))**.72) * (.86 + .14*np.cos(breath))
-pcm = np.rint(18500 * signal / np.max(np.abs(signal))).astype("<i2")
-with wave.open(str(Path(__file__).resolve().parents[1] / "Assets/CatModel/Purr.wav"), "wb") as out:
-    out.setparams((1, 2, rate, len(pcm), "NONE", ""))
-    out.writeframes(pcm.tobytes())
+def save(name, samples, peak):
+    pcm = np.rint(peak * samples / np.max(np.abs(samples))).astype("<i2")
+    with wave.open(str(Path(__file__).resolve().parents[1] / "Assets/CatModel" / name), "wb") as out:
+        out.setparams((1, 2, rate, len(pcm), "NONE", ""))
+        out.writeframes(pcm.tobytes())
+
+save("Purr.wav", signal, 18500)
+t = np.arange(int(rate * .23)) / rate
+noise = np.random.default_rng(41).normal(size=t.size)
+freq = np.fft.rfftfreq(t.size, 1 / rate)
+fibers = np.fft.irfft(np.fft.rfft(noise) * np.exp(-((freq - 2200) / 1350)**2), n=t.size)
+save("Scratch.wav", fibers * np.sin(np.pi * t / .23)**2 * (.5+.5*np.cos(t*115)**2), 6300)
+t = np.arange(int(rate * .15)) / rate
+save("Nudge.wav", np.sin(2*np.pi*(380*t-660*t*t)) * np.sin(np.pi*t/.15)**2 * np.exp(-15*t), 7400)

@@ -13,6 +13,7 @@ struct PhoneControlView: View {
             Form {
                 Section("Телефон") {
                     Button("Узнать заряд") { run("battery") }
+                    Button("Узнать яркость") { run("brightness_read") }
                     Slider(value: $brightness, in: 0...100, step: 1)
                     Button("Яркость \(Int(brightness))%") { run("brightness", String(Int(brightness))) }
                     Button("Настройки AiCat") { run("settings") }
@@ -33,8 +34,14 @@ struct PhoneControlView: View {
                     Button("Запустить команду") { run("run_shortcut", shortcut) }
                     Text("Создай команду в приложении «Команды» и укажи её имя. Так можно запускать свои сценарии Wi-Fi, Bluetooth, фокусирования и других доступных действий.").font(.caption)
                 }
-                if !status.isEmpty { Text(status) }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !status.isEmpty {
+                    Text(status).frame(maxWidth: .infinity, alignment: .leading)
+                        .padding().background(.regularMaterial)
+                }
+            }
+            .onAppear { brightness = Double(UIScreen.main.brightness) * 100 }
             .navigationTitle("Телефон")
             .toolbar { Button("Готово") { dismiss() } }
         }

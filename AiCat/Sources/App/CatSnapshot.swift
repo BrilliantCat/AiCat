@@ -159,7 +159,7 @@ struct CatPicture: View {
         let location: (name: String, folder: String)
         if let islandSide {
             let state = islandState ?? (scene == "sleep" ? "sleep" : "peek")
-            location = ("\(state)-\(islandSide)", islandSide == "leading" ? "kitten" : "dynamic-island")
+            location = ("\(state)-\(islandSide)", "dynamic-island")
         } else {
             location = (["idle","purr","sleep","play","eat","groom","computer"].contains(scene) ? scene : "idle", "kitten")
         }

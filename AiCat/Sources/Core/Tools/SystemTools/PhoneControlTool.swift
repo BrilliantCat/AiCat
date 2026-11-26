@@ -21,6 +21,7 @@ public final class PhoneControlTool: NSObject, UNUserNotificationCenterDelegate 
             UIDevice.current.isBatteryMonitoringEnabled = true
             let level = UIDevice.current.batteryLevel
             return level < 0 ? "Заряд батареи недоступен." : "Заряд iPhone: \(Int(level * 100))%."
+        case "brightness_read": return "Яркость экрана: \(Int((UIScreen.main.brightness * 100).rounded()))%."
         case "brightness":
             guard let percent = Double(value), percent.isFinite, (0...100).contains(percent) else {
                 return "Укажи яркость от 0 до 100."
