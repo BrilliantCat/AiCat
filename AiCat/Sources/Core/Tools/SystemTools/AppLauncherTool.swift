@@ -13,15 +13,13 @@ public final class AppLauncherTool {
         "ютуб": "youtube://",
         "whatsapp": "whatsapp://",
         "ватсап": "whatsapp://",
-        "камера": "camera://",
-        "camera": "camera://",
-        "настройки": "App-Prefs:root=General",
-        "settings": "App-Prefs:root=General",
         "музыка": "music://",
         "music": "music://",
         "карты": "maps://",
         "maps": "maps://",
+        "calculator": "calculator://",
         "калькулятор": "calculator://",
+        "notes": "mobilenotes://",
         "заметки": "mobilenotes://"
     ]
     
@@ -35,9 +33,9 @@ public final class AppLauncherTool {
         if ["settings", "настройки"].contains(cleanName) {
             return await PhoneControlTool.shared.execute(command: "settings")
         }
-        guard let scheme = appSchemes[cleanName] ?? appSchemes.first(where: { cleanName.contains($0.key) })?.value,
+        guard let scheme = appSchemes[cleanName],
               let url = URL(string: scheme) else {
-            return "Не смог найти приложение «\(named)». Возможно, у него нет системной URL-схемы."
+            return "Для «\(named)» создай в «Командах» сценарий с действием «Открыть приложение» и привяжи к нему фразу в AiCat → Телефон."
         }
         
         let opened = await UIApplication.shared.open(url, options: [:])

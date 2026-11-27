@@ -57,9 +57,9 @@ def frame(motion,phase):
     root[1]=.006*wave
     if motion in ("walk","trot"):
         running=motion=="trot"
-        root[:]=[.017*np.sin(t+.45),-.021+(.032 if running else .012)*np.cos(2*t),0]
+        root[:]=[.017*np.sin(t+.45),-.021+(.038 if running else .014)*np.cos(2*t-.22),0]
         angle("pelvis",[.018*np.cos(2*t),.038*wave,.024*np.sin(t+.45)])
-        angle("spine",[0,-.065*wave,-.040*np.sin(t+.45)])
+        angle("spine",[.058*np.sin(2*t-.32) if running else -.012*np.sin(2*t),-.065*wave,-.040*np.sin(t+.45)])
         angle("chest",[-.016*np.cos(2*t),.042*wave,.028*np.sin(t-.25)])
         angle("neck",[.025*np.cos(2*t-.55),-.022*wave,-.017*np.sin(t)])
         # Lateral-sequence walk: each hind foot precedes the forefoot on that side.
@@ -86,6 +86,20 @@ def frame(motion,phase):
                 wrist_pitch[label]=.28*toe_off-.13*np.sin(2*np.pi*step)
                 if step>=contact:
                     feet[label][1]+=.024*np.sin(np.pi*swing)**2
+    elif motion=="scratch":
+        # Solve each paw target before skinning. The planted pads never rotate through the rug.
+        root[:]=[.012*wave,-.10,.03]
+        angle("spine",[-.05,0,0]);angle("chest",[.22,.025*wave,0])
+        angle("neck",[.14,0,0]);angle("head",[-.13,.035*wave,0])
+        for label in ("hindL","hindR"):
+            feet[label][1]+=.006
+        for i,label in enumerate(["foreL","foreR"]):
+            u=(phase+i*.5)%1
+            swing=u>=.54
+            f=(u-.54)/.46 if swing else u/.54
+            smooth=f*f*(3-2*f)
+            feet[label][2]+=.13+.19*(smooth if swing else 1-smooth)
+            feet[label][1]+=.012+(.078*np.sin(np.pi*f)**2 if swing else 0)
     elif motion in ("sleep","settle","curl"):
         entering=motion=="settle"
         haunch=ease(.03,.55) if entering else 1
@@ -126,12 +140,12 @@ def frame(motion,phase):
             root[1]=-.045+.03*pulse
             angle("chest",[-.13*pulse,0,0]);angle("head",[-.06*pulse,0,0])
         elif motion=="shoulders":
-            root[1]=-.045+.022*wave
-            angle("chest",[-.10*wave,0,.10*np.cos(t)])
+            root[:]=[.022*np.sin(t),-.05+.031*wave,0]
+            angle("chest",[-.10*wave,0,.15*np.cos(t)])
             angle("neck",[.045*wave,0,-.07*np.cos(t)])
         elif motion=="stretch":
-            root[1]=-.095
-            angle("spine",[.21+.04*pulse,0,0]);angle("chest",[.23,0,0])
+            root[1]=-.04-.09*pulse
+            angle("spine",[.12+.14*pulse,0,0]);angle("chest",[.06+.20*pulse,0,0])
             angle("neck",[.16,0,0]);angle("head",[-.12,0,0])
             for label,p in feet.items():
                 p[2]+=.30 if label.startswith("fore") else -.045
@@ -140,8 +154,10 @@ def frame(motion,phase):
             angle("spine",[-.23*pulse,0,0]);angle("chest",[.44*pulse-.10,0,0])
             angle("neck",[.23*pulse,0,0]);angle("head",[.14*pulse-.08,0,0])
         else:
-            depth=pulse if motion=="pushUp" else .62+.025*wave
-            root[1]=-.065-.17*depth
+            # Lower, hold, then press back up with all four pads planted.
+            depth=(ease(.06,.44)-ease(.56,.92)) if motion=="pushUp" else .62+.025*wave
+            root[1]=-.025-.22*depth
+            root[2]=.030*depth
             angle("spine",[.035+.095*depth,0,0]);angle("chest",[.055*depth,0,0])
             angle("neck",[.09-.10*depth,0,0])
             for label,p in feet.items():p[2]+=.075 if label.startswith("fore") else -.16
@@ -149,6 +165,13 @@ def frame(motion,phase):
         root[1]=-.21 if motion!="squat" else -.12-.13*pulse
         angle("spine",[-.29,0,0]);angle("chest",[-.15,0,0])
         angle("neck",[.22,0,0])
+        if motion=="squat":
+            sit=ease(.06,.43)-ease(.57,.94)
+            root[:]=[.006*wave,-.019-.255*sit,-.050*sit]
+            angle("spine",[-.31*sit,0,0]);angle("chest",[-.19*sit,0,0])
+            angle("neck",[.29*sit,0,0]);angle("head",[.08*sit,0,0])
+            for label in feet:
+                if label.startswith("hind"): wrist_pitch[label]=-.43*sit
         if motion=="computer":
             angle("neck",[.42,0,0])
             angle("head",[.49+.042*wave,-.035,.024*wave])
@@ -158,7 +181,7 @@ def frame(motion,phase):
             feet["foreL"][1:]=[.53+.023*wave,.60];angle("head",[.39+.075*wave,-.35,.13])
         elif motion=="think":angle("head",[-.12,.19,.11])
         for label,p in feet.items():
-            if label.startswith("hind"):p[2]+=.12
+            if label.startswith("hind") and motion!="squat":p[2]+=.12
     elif motion=="play":
         root[1]=-.11+.04*pulse
         feet["foreR"][1:]=[.08+.064*pulse,.38+.27*pulse]
@@ -234,7 +257,7 @@ def frame(motion,phase):
 
 
 def make_clips():
-    periods=dict(idle=6.4,walk=.8,trot=.54,sleep=4.2,eat=1.25,groom=1.1,computer=1.0,purr=2.2,
+    periods=dict(scratch=1.04,idle=6.4,walk=.8,trot=.54,sleep=4.2,eat=1.25,groom=1.1,computer=1.0,purr=2.2,
                  play=.95,talk=1.3,think=3.8,scan=3.8,squat=2.2,pushUp=2.2,plank=3.2,
                  yoga=3.6,stretch=4.2,curl=4.8,breath=4.0,shoulders=2.8)
     clips={name:dict(seconds=seconds,frames=[frame(name,i/24) for i in range(24)]) for name,seconds in periods.items()}

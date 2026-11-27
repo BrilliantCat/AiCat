@@ -44,6 +44,10 @@
     <string>AiCat управляет календарем.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>AiCat планирует события в твоем календаре.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>AiCat находит номер названного контакта для звонка или черновика сообщения.</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>AiCat управляет воспроизведением в приложении Музыка по твоей команде.</string>
     <key>NSCameraUsageDescription</key>
     <string>AiCat использует камеру для фото и, по твоему выбору, для подсчёта отжиманий. При тренировке расстояние до лица обрабатывается на iPhone. Кадры и данные лица не сохраняются и не отправляются.</string>
     <key>NSPhotoLibraryUsageDescription</key>

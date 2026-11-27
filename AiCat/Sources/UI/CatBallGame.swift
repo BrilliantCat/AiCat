@@ -62,7 +62,8 @@ struct CatBallGame {
         // The playable floor stays the same width when the kitten is resized.
         let scale = CatRoomScenery.kittenScale
         let floor = p * scale
-        return SIMD2(min(2.35, max(-2.35, floor.x)), min(1.95, max(-1.05, floor.y))) / scale
+        let target = CatRoomScenery.floorTarget([floor.x, 0, floor.y])
+        return SIMD2(target.x, target.z) / scale
     }
 
     mutating func advance(by dt: Float) {

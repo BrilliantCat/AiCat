@@ -25,7 +25,10 @@ public struct MainView: View {
     @AppStorage("aicat.autoChat") private var automaticChat = false
     @AppStorage("aicat.hordeConsent") private var hordeConsent = false
     @State private var askForOnline = false
+    @AppStorage("aicat.phone.voiceRun") private var runSpokenCommands = true
+    @AppStorage("aicat.lessonSheets") private var useLessonSheets = false
     @State private var hideRequest = 0
+    @State private var recallRequest = 0
     @State private var inRoom = true
     
     @FocusState private var isInputFocused: Bool
@@ -71,16 +74,17 @@ public struct MainView: View {
                     Group {
                         if (fitnessCoach.isWorkoutActive || yogaCoach.isSessionActive), let pose = catMotion {
                             LessonDemonstration(motion: pose, paused: yogaCoach.isPaused || fitnessCoach.isPaused,
-                                                breath: yogaCoach.breathStep)
+                                                breath: yogaCoach.breathStep, useSheets: useLessonSheets,
+                                                visible: !showWardrobe && !showMediaStudio && !showModelManager && !showDebugLog && !showRAGManager && !showPhoneControl)
                         } else {
                             Cat3DSceneView(motion: catMotion, inRoom: true, isRoaming: tamagotchi.isRoaming,
-                                           hideRequest: hideRequest,
+                                           hideRequest: hideRequest, recallRequest: recallRequest,
                                            isVisible: !showWardrobe && !showMediaStudio && !showModelManager &&
                                        !showDebugLog && !showRAGManager && !showPhoneControl)
+                                .clipShape(RoundedRectangle(cornerRadius: 24))
                         }
                     }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
                         .padding(.horizontal, 8)
                         .accessibilityLabel("Комната кота")
                         .accessibilityAction(named: "Погладить") { petCompanion() }
@@ -157,10 +161,16 @@ public struct MainView: View {
         .onAppear {
             self.chatMessages = ChatStorage.shared.loadMessages()
         }
-        .onChange(of: speechRecognizer.transcribedText) { _, newText in
+        .onReceive(speechRecognizer.$transcribedText.dropFirst()) { newText in
             if !newText.isEmpty {
                 self.inputText = newText
             }
+        }
+        .onReceive(speechRecognizer.finishedUtterance) { text in
+            guard runSpokenCommands, !waitingForReply, !inRoom,
+                  PhoneCommand.parse(text, shortcuts: PhoneCommand.savedShortcuts) != nil else { return }
+            inputText = ""
+            sendUserQuery(text)
         }
         .onChange(of: speechRecognizer.isRecording) { _, recording in if recording { inRoom = false } }
     }
@@ -229,6 +239,9 @@ public struct MainView: View {
                 }
                 .disabled(waitingForReply)
                 Button("Модели", systemImage: "cpu") { showModelManager = true }
+                if fitnessCoach.isWorkoutActive || yogaCoach.isSessionActive {
+                    Toggle("Упрощённый показ занятия", isOn: $useLessonSheets)
+                }
                 Button("Диагностика", systemImage: "waveform.path.ecg") { showDebugLog = true }
                 Text(liveActivity.islandStatus)
                 Button("Показать кота в острове", systemImage: "pawprint") {
@@ -360,8 +373,11 @@ public struct MainView: View {
             Button { _ = tamagotchi.feedFish() } label: { Label("Кормить", systemImage: "fish") }
             Menu {
                 Button("Мячик") { _ = tamagotchi.play() }
-                Button("Прятки") { hideRequest += 1 }
-                    .disabled(catMotion != nil || tamagotchi.isSleeping)
+                Group {
+                    Button("Прятки") { hideRequest += 1 }
+                    Button("Позвать на ковёр") { recallRequest += 1 }
+                }
+                .disabled(catMotion != nil || tamagotchi.isSleeping)
             } label: { Label("Играть", systemImage: "gamecontroller") }
             Menu {
                 Button("Погладить", systemImage: "hand.draw") { petCompanion() }

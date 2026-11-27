@@ -48,7 +48,7 @@ public final class LLMEngine: ObservableObject {
     private func wantsTools(_ userPrompt: String) -> Bool {
         let actionWords = ["напомни", "создай", "запиши", "открой", "включи", "выключи", "нарисуй",
                            "сгенерируй", "переведи", "покорми", "погладь", "поигра", "одень", "переодень",
-                           "покажи", "найди", "запусти", "начни", "календар", "напоминани", "статус"]
+                           "покажи", "найди", "запусти", "позвон", "набери номер", "смс", "напиши письмо", "начни", "календар", "напоминани", "статус"]
         return !PromptBuilder.wordGameInvitation(userPrompt) && actionWords.contains { userPrompt.lowercased().contains($0) }
     }
 
@@ -89,6 +89,12 @@ public final class LLMEngine: ObservableObject {
 
         // Парсинг JSON-вызова инструмента
         if includeTools, let toolCall = parseToolCall(from: rawModelOutput) {
+            // Dialling, addressing messages and running a named shortcut use the user's original words.
+            // Structured model output can invent a recipient or accidentally repeat a previous command.
+            if toolCall.tool == "device_action", let action = toolCall.parameters?["command"],
+               ["call", "facetime", "sms_draft", "mail_draft", "run_shortcut"].contains(action) {
+                return ("Укажи действие и адресата одной фразой. Например: «позвони маме», «напиши СМС маме: я дома» или «запусти команду Вечер».", nil)
+            }
             let toolRes = await ToolRegistry.shared.executeTool(name: toolCall.tool, parameters: toolCall.parameters ?? [:])
             await MainActor.run { self.lastToolExecuted = toolCall.tool }
             
@@ -190,17 +196,6 @@ public final class LLMEngine: ObservableObject {
         if hasAnyWord(["проснись", "подъем", "вставай"]) {
             let res = await MainActor.run { TamagotchiManager.shared.wake() }
             return (res, nil)
-        }
-        
-        // 3. СИСТЕМНЫЕ ДЕЙСТВИЯ: ФОНАРИК, ТАЙМЕР
-        if lower.contains("фонарик") || lower.contains("свет") {
-            if lower.contains("выключ") || lower.contains("погаси") {
-                let res = await ToolRegistry.shared.executeTool(name: "device_action", parameters: ["command": "flashlight_off"])
-                return (res.result, nil)
-            } else {
-                let res = await ToolRegistry.shared.executeTool(name: "device_action", parameters: ["command": "flashlight_on"])
-                return (res.result, nil)
-            }
         }
         
         // 4. ТРЕНИРОВКИ: ОТЖИМАНИЯ, ПРИСЕДАНИЯ, ЙОГА
@@ -312,19 +307,8 @@ public final class LLMEngine: ObservableObject {
         let lessons = ["дыхание": "breathing", "начни дыхание": "breathing", "разминка": "mobility",
                        "начни разминку": "mobility", "планка": "plank"]
         if let type = lessons[lower] { return ("start_workout", ["workoutType": type]) }
-        if ["заряд батареи", "сколько заряда"].contains(lower) { return ("device_action", ["command": "battery"]) }
-        if lower == "отмени таймер" { return ("device_action", ["command": "timer_cancel"]) }
-        let prefixes = ["яркость ": "brightness", "скопируй ": "copy_text", "открой сайт ": "open_url",
-                        "найди на карте ": "maps", "запусти команду ": "run_shortcut"]
-        for (prefix, command) in prefixes where lower.hasPrefix(prefix) {
-            return ("device_action", ["command": command, "value": String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)])
-        }
-        if lower.hasPrefix("таймер ") {
-            let parts = lower.split(separator: " ")
-            if parts.count >= 2, let number = Double(parts[1].replacingOccurrences(of: ",", with: ".")) {
-                let seconds = number * (lower.contains("мин") ? 60 : 1)
-                return ("device_action", ["command": "timer_start", "value": String(seconds)])
-            }
+        if let device = PhoneCommand.parse(text, shortcuts: PhoneCommand.savedShortcuts) {
+            return ("device_action", ["command": device.command, "value": device.value, "detail": device.detail])
         }
         return nil
     }

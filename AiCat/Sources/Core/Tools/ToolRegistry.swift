@@ -1,6 +1,5 @@
 import Foundation
 import UIKit
-import AVFoundation
 
 public struct ToolCallPayload: Codable {
     public let thought: String?
@@ -25,7 +24,7 @@ public final class ToolRegistry {
         ToolDefinition(
             name: "cat_action",
             description: "Управление физическими действиями кота (трюки, анимации, гардероб)",
-            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "кепка, берет, черные или янтарные очки, кулон, бабочка, худи, жилетка. take_off без item снимает всё."],
+            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "кепка, берет, черные или янтарные очки, кулон, бабочка, худи, жилетка, джинсовые штаны. take_off без item снимает всё."],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -78,8 +77,8 @@ public final class ToolRegistry {
         ),
         ToolDefinition(
             name: "device_action",
-            description: "Управление системными функциями устройства (фонарик, таймер)",
-            parametersSchema: ["command": "flashlight_on | flashlight_off | battery | brightness | copy_text | open_url | maps | run_shortcut | settings | camera | timer_start | timer_cancel", "value": "яркость 0–100, секунды таймера, текст, URL, место или название команды"],
+            description: "Управление телефоном и приложениями iOS",
+            parametersSchema: ["command": PhoneCommand.toolCommands, "value": "номер, имя контакта, email, адрес, название команды, текст или число", "detail": "текст сообщения или входной текст команды"],
             requiresConfirmation: false
         ),
         ToolDefinition(
@@ -184,12 +183,7 @@ public final class ToolRegistry {
             
         case "device_action":
             let cmd = parameters["command"] ?? ""
-            let res: String
-            if cmd == "flashlight_on" || cmd == "flashlight_off" {
-                res = await MainActor.run { self.handleDeviceAction(cmd) }
-            } else {
-                res = await PhoneControlTool.shared.execute(command: cmd, value: parameters["value"] ?? "")
-            }
+            let res = await PhoneControlTool.shared.execute(command: cmd, value: parameters["value"] ?? "", detail: parameters["detail"] ?? "")
             return (true, res, nil)
             
         case "translate":
@@ -266,38 +260,6 @@ public final class ToolRegistry {
             
         default:
             return (false, "Неизвестный инструмент: \(name)", nil)
-        }
-    }
-    
-    // Системные действия с реальным управлением фонариком
-    @MainActor private func handleDeviceAction(_ command: String) -> String {
-        switch command {
-        case "flashlight_on":
-            if toggleTorch(on: true) {
-                return "Включил фонарик! Освещаю путь кошачьим лучом 🔦"
-            }
-            return "Не удалось включить фонарик (возможно, устройство не поддерживает)."
-            
-        case "flashlight_off":
-            if toggleTorch(on: false) {
-                return "Фонарик выключен. Возвращаемся в таинственную темноту."
-            }
-            return "Фонарик уже выключен."
-            
-        default:
-            return "Команда '\(command)' не поддерживается."
-        }
-    }
-    
-    private func toggleTorch(on: Bool) -> Bool {
-        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return false }
-        do {
-            try device.lockForConfiguration()
-            device.torchMode = on ? .on : .off
-            device.unlockForConfiguration()
-            return true
-        } catch {
-            return false
         }
     }
     

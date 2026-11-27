@@ -160,7 +160,7 @@ jobs:
           cp -r build/AiCat.xcarchive/Products/Applications/AiCat.app build/Payload/
           app="build/Payload/AiCat.app"
           widget="$app/PlugIns/AiCatWidget.appex"
-          for resource in BritishKitten.mesh BritishKitten.json SilverCoat.png Purr.wav Nudge.wav Scratch.wav; do
+          for resource in BritishKitten.mesh BritishKitten.json SilverCoat.png Purr.wav Nudge.wav Scratch.wav Hoodie.cloth Vest.cloth Trousers.cloth; do
             test -s "$app/CatModel/$resource" || { echo "::error::Missing CatModel/$resource"; exit 1; }
           done
           for resource in SittingRoom.mesh SittingRoom.json Kilim.jpg Oak.jpg Linen.jpg StreetDay.jpg StreetNight.jpg; do

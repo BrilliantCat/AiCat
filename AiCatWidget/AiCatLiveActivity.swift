@@ -14,11 +14,20 @@ struct AiCatLiveActivity: Widget {
     }
     
     public var body: some WidgetConfiguration {
-        ActivityConfiguration(for: AiCatAttributes.self) { _ in
-            Spacer(minLength: 0)
-                .frame(height: 1)
-                .fixedSize(horizontal: false, vertical: true)
-                .activityBackgroundTint(.clear)
+        ActivityConfiguration(for: AiCatAttributes.self) { context in
+            let saying = DailySaying.forDay(Date())
+            HStack(spacing: 10) {
+                CatPicture(scene: "idle", islandSide: "leading", outfit: context.state.outfit, islandState: "peek")
+                    .frame(width: 38, height: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(saying.text).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    Text(saying.source).font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .activityBackgroundTint(.clear)
+            .widgetURL(URL(string: "aicat://chat"))
         } dynamicIsland: { context in
             let mood = context.isStale ? "😼" : context.state.moodEmoji
             return DynamicIsland {

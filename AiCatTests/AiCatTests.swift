@@ -141,6 +141,95 @@ final class AiCatTests: XCTestCase {
         XCTAssertEqual(game.phase, .idle)
     }
 
+    func testPhoneCommandsPreserveRecipientsAndPayloads() {
+        XCTAssertEqual(PhoneCommand.parse("Котик, напиши СМС маме: Я дома!"),
+                       PhoneCommand(command: "sms_draft", value: "маме", detail: "Я дома!"))
+        XCTAssertEqual(PhoneCommand.parse("Письмо о прошлом звонке"), nil)
+        XCTAssertNil(PhoneCommand.parse("Не позвони маме"))
+        XCTAssertNil(PhoneCommand.parse("Как включить фонарик?"))
+        XCTAssertEqual(PhoneCommand.parse("Маршрут пешком до Йошкар-Олы")?.value, "Йошкар-Олы")
+        XCTAssertEqual(PhoneCommand.parse("запусти команду Заметка с текстом A&B + C"),
+                       PhoneCommand(command: "run_shortcut", value: "Заметка", detail: "A&B + C"))
+        XCTAssertEqual(PhoneCommand.parse("ВКЛЮЧИ Wi-Fi!", shortcuts: ["включи wi-fi":"Домашняя сеть"]),
+                       PhoneCommand(command: "run_shortcut", value: "Домашняя сеть"))
+        XCTAssertEqual(PhoneCommand.parse("Включи Wi-Fi")?.command, "shortcut_setup")
+        XCTAssertEqual(PhoneCommand.parse("Планы на завтра")?.command, "agenda_tomorrow")
+    }
+
+    func testPhoneTimerUnderstandsUnitsAndRejectsExtraWords() {
+        XCTAssertEqual(PhoneCommand.parse("поставь таймер на пять минут")?.value, "300.0")
+        XCTAssertEqual(PhoneCommand.parse("таймер на 1 час и 15 минут")?.value, "4500.0")
+        XCTAssertEqual(PhoneCommand.parse("таймер 1,5 мин")?.value, "90.0")
+        XCTAssertEqual(PhoneCommand.parse("таймер 5 бананов")?.value, "")
+        XCTAssertEqual(PhoneCommand.parse("Установи яркость на 40 процентов.")?.value, "40")
+    }
+
+    @MainActor
+    func testCommunicationDestinationsAndDraftEncoding() throws {
+        XCTAssertEqual(PhoneCommunication.phoneNumber("+7 (999) 123-45-67"), "+79991234567")
+        XCTAssertNil(PhoneCommunication.phoneNumber("12*345#"))
+        XCTAssertNil(PhoneCommunication.phoneNumber("123+456"))
+        XCTAssertNil(PhoneCommunication.emailDraft(to: "x@example.com?bcc=a@b.co", body: "Привет"))
+        let body = "Привет + & ? #"
+        let draft = try XCTUnwrap(PhoneCommunication.emailDraft(to: "cat+test@example.com", body: body))
+        let fields = try XCTUnwrap(URLComponents(url: draft, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(fields.path, "cat+test@example.com")
+        XCTAssertEqual(fields.queryItems?.first?.value, body)
+    }
+
+    func testFloorTargetsStopAtTheRugEvenAfterRepeatedNudges() {
+        for side: Float in [-1, 1] {
+            var target = SIMD3<Float>.zero
+            for _ in 0..<200 {
+                target = CatRoomScenery.floorTarget(target + SIMD3(side * 0.18, 0, side * 0.2))
+            }
+            XCTAssertTrue(CatRoomScenery.rugX.contains(target.x + side * 0.6))
+            XCTAssertTrue(CatRoomScenery.rugZ.contains(target.z))
+            XCTAssertEqual(target, CatRoomScenery.floorTarget(target + SIMD3(side, 0, side)))
+        }
+    }
+
+    func testSayingChangesAtLocalMidnight() throws {
+        let zone = try XCTUnwrap(TimeZone(secondsFromGMT: 3 * 3600))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let evening = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 23, minute: 59)))
+        let today = DailySaying.index(evening, zone: zone)
+        XCTAssertEqual(today, DailySaying.index(evening.addingTimeInterval(-3600), zone: zone))
+        let tomorrow = DailySaying.index(evening.addingTimeInterval(60), zone: zone)
+        XCTAssertNotEqual(DailySaying.sayings[today].text, DailySaying.sayings[tomorrow].text)
+    }
+
+    @MainActor
+    func testClothesShareTheKittenSkeletonAndTrousersLayerWithTops() throws {
+        let cat = SCNNode()
+        _ = try XCTUnwrap(CatMotionRig(cat: cat))
+        let body = try XCTUnwrap(cat.childNode(withName: "BritishKittenSkin", recursively: true)?.skinner)
+        for garment: CatGarment in [.hoodie, .vest, .trousers] {
+            let fabric = try XCTUnwrap(cat.childNode(withName: garment.rawValue, recursively: true)?.skinner)
+            XCTAssertTrue(fabric.skeleton === body.skeleton)
+            XCTAssertEqual(fabric.bones.count, body.bones.count)
+            XCTAssertGreaterThan(fabric.boneWeights.vectorCount, 100)
+        }
+        XCTAssertEqual(CatGarment.equipping([.trousers], over: [.hoodie]), [.hoodie, .trousers])
+    }
+
+    @MainActor
+    func testScratchLiftsAlternatingFrontPaws() throws {
+        let cat = SCNNode()
+        let rig = try XCTUnwrap(CatMotionRig(cat: cat))
+        let left = try XCTUnwrap(cat.childNode(withName: "foreL3", recursively: true))
+        let right = try XCTUnwrap(cat.childNode(withName: "foreR3", recursively: true))
+        rig.set(.scratch, reduced: true)
+        var heights: [Float] = []
+        for _ in 0..<64 {
+            rig.advance(by: 1 / 60)
+            heights.append(left.simdWorldPosition.y - right.simdWorldPosition.y)
+        }
+        XCTAssertGreaterThan(try XCTUnwrap(heights.max()), 0.05)
+        XCTAssertLessThan(try XCTUnwrap(heights.min()), -0.05)
+    }
+
     func testEveryLessonIncludesAPlayableSheet() throws {
         for motion in CatMotion.allCases where motion.isExercise || motion == .walk {
             let path = try XCTUnwrap(Bundle.main.url(forResource: motion.rawValue, withExtension: "jpg", subdirectory: "LivingRoom/Lessons"))

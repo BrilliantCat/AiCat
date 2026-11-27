@@ -10,7 +10,9 @@ enum CatGarment: String, CaseIterable, Identifiable {
     case hoodie = "Неоновый худи"
     case vest = "Горчичная жилетка"
 
-    enum Slot: String, CaseIterable { case head = "На голову", eyes = "Очки", neck = "На шею", body = "Одежда" }
+    case trousers = "Джинсовые штаны"
+
+    enum Slot: String, CaseIterable { case head = "На голову", eyes = "Очки", neck = "На шею", body = "Одежда", legs = "Штаны" }
     var id: Self { self }
     var slot: Slot {
         switch self {
@@ -18,6 +20,7 @@ enum CatGarment: String, CaseIterable, Identifiable {
         case .glasses, .readers: return .eyes
         case .pendant, .bow: return .neck
         case .hoodie, .vest: return .body
+        case .trousers: return .legs
         }
     }
 
@@ -35,6 +38,7 @@ enum CatGarment: String, CaseIterable, Identifiable {
             case .bow: return words.contains("бабочк")
             case .hoodie: return words.contains("худи")
             case .vest: return words.contains("жилет")
+            case .trousers: return words.contains("штан") || words.contains("джинс")
             }
         }
     }

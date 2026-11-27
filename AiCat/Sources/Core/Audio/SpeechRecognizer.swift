@@ -12,6 +12,8 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     @Published private(set) var isTranscribing = false
     @Published public var errorMessage: String?
     
+    let finishedUtterance = PassthroughSubject<String, Never>()
+    private var receivedFinal = false
     private var audioEngine = AVAudioEngine()
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -53,6 +55,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
     
     public func startListening() throws {
         stopListening()
+        receivedFinal = false
         
         CatSpeechSynthesizer.shared.stop()
         CatPurrFeedback.shared.stop()
@@ -104,8 +107,12 @@ public final class OfflineSpeechRecognizer: ObservableObject {
                     } else { self.errorMessage = error.localizedDescription }
                 }
                 if error != nil || result?.isFinal == true {
+                    self.receivedFinal = result?.isFinal == true && error == nil
                     if self.isTranscribing { self.recognitionRequest = nil }
-                    else { self.stopListening() }
+                    else {
+                        self.stopListening()
+                        if self.receivedFinal { self.finishedUtterance.send(self.transcribedText) }
+                    }
                 }
             }
         }
@@ -150,6 +157,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
             }.value
             guard id == recordingID else { return "" }
             transcribedText = text ?? ""
+            receivedFinal = !transcribedText.isEmpty
         } else {
             audioEngine.stop()
             recognitionRequest?.endAudio()
@@ -162,6 +170,7 @@ public final class OfflineSpeechRecognizer: ObservableObject {
         }
         stopListening()
         if transcribedText.isEmpty { errorMessage = "Не расслышал. Попробуй сказать фразу ещё раз." }
+        if receivedFinal && !transcribedText.isEmpty { finishedUtterance.send(transcribedText) }
         return transcribedText
     }
     

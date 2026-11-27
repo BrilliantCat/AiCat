@@ -3,7 +3,7 @@ import simd
 import UIKit
 
 enum CatMotion: String, CaseIterable {
-    case idle, walk, trot, purr, play, sleep, eat, groom, think, talk, pushUp, squat, plank, yoga, stretch, curl, scan, computer, breath, shoulders
+    case idle, walk, trot, scratch, purr, play, sleep, eat, groom, think, talk, pushUp, squat, plank, yoga, stretch, curl, scan, computer, breath, shoulders
 
     var isExercise: Bool {
         switch self {
@@ -32,7 +32,7 @@ final class CatMotionRig {
     private let eyeIndices: [Int]
     var gaze = SIMD2<Float>.zero
 
-    init?(cat: SCNNode) {
+    init?(cat: SCNNode, includeClothes: Bool = true) {
         guard let asset = CatBodyMesh.asset,
               let head = asset.description.bones.firstIndex(of: "head") else { return nil }
         model = asset.description
@@ -65,6 +65,15 @@ final class CatMotionRig {
         surface.name = "BritishKittenSkin"
         surface.skinner = skin
         cat.addChildNode(surface)
+        for (item, fabric) in (includeClothes ? CatClothing.assets : [:]) {
+            let node = SCNNode(geometry: fabric.geometry)
+            node.name = item.rawValue
+            node.isHidden = true
+            node.skinner = SCNSkinner(baseGeometry: fabric.geometry, bones: nodes, boneInverseBindTransforms: inverseBind,
+                                       boneWeights: fabric.weights, boneIndices: fabric.indices)
+            node.skinner?.skeleton = nodes[0]
+            cat.addChildNode(node)
+        }
         installProps(in: cat)
         set(.idle, reduced: true)
     }
@@ -122,14 +131,6 @@ final class CatMotionRig {
         }
     }()
 
-    func scratch(at time: Float) {
-        for (side, shift) in [("foreL0", Float.zero), ("foreR0", Float.pi)] {
-            if let i = model.bones.firstIndex(of: side) {
-                bones[i].simdOrientation = rotations[i] * simd_quatf(angle: sin(time * 12 + shift) * 0.42, axis: [1,0,0])
-            }
-        }
-    }
-
     func set(_ next: CatMotion, reduced: Bool) {
         if next != motion {
             previous = rotations
@@ -185,7 +186,7 @@ final class CatMotionRig {
                 simd_quatf(vector: SIMD4<Float>(frame[k],frame[k+1],frame[k+2],frame[k+3]))
             }
             let target = simd_slerp(rotation(a), rotation(b), fraction)
-            rotations[i] = simd_slerp(previous[i], target, blend)
+            rotations[i] = blend >= 1 ? target : simd_slerp(previous[i], target, blend)
             bones[i].simdOrientation = rotations[i]
         }
         if motion != .sleep {

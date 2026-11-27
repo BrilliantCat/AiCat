@@ -61,8 +61,8 @@ def render_room(night, size=(410,520), cat=(0,0), heading=-.54, clip="idle", t=.
     slope=max(1.48,half*h/w)/5.5
     eye=np.array([focus,2.20,6.30])
     if lesson:
-        eye=np.array([focus,1.50,3.8]); slope=.38
-    back=unit(eye-[focus,.53 if lesson else 1.02,0])
+        eye=np.array([focus,1.34,4.05])*KITTEN_SCALE; slope=max(np.tan(np.deg2rad(37)/2)*h/w,.23)
+    back=unit(eye-[focus,.63*KITTEN_SCALE if lesson else 1.02,0])
     right=unit(np.cross([0,1,0],back));up=np.cross(back,right)
     view=np.eye(4);view[:3,:3]=np.stack([right,up,back]);view[:3,3]=-view[:3,:3]@eye
     projection=np.array([[h/w/slope,0,0,0],[0,1/slope,0,0],[0,0,-100.1/99.9,-20/99.9],[0,0,-1,0]])

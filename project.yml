@@ -78,6 +78,8 @@ targets:
         NSRemindersFullAccessUsageDescription: "AiCat создает и читает напоминания для организации твоего расписания."
         NSCalendarsUsageDescription: "AiCat управляет календарем."
         NSCalendarsFullAccessUsageDescription: "AiCat планирует события в твоем календаре."
+        NSContactsUsageDescription: "AiCat находит номер названного контакта для звонка или черновика сообщения."
+        NSAppleMusicUsageDescription: "AiCat управляет воспроизведением в приложении Музыка по твоей команде."
         NSCameraUsageDescription: "AiCat использует камеру для фото и, по твоему выбору, для подсчёта отжиманий. При тренировке расстояние до лица обрабатывается на iPhone. Кадры и данные лица не сохраняются и не отправляются."
         NSPhotoLibraryUsageDescription: "AiCat редактирует фото по твоим командам."
         NSPhotoLibraryAddUsageDescription: "AiCat сохраняет созданные изображения в медиатеку Фото."

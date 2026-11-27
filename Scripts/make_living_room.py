@@ -164,7 +164,7 @@ for i in range(19):
     for j in range(5):
         tint=round(rng.uniform(.84,1)*255)
         box((-6+j*3+(i%2)*1.5,-.088,z),(2.995,.10,.475),(tint,)*3,.004,"oak")
-box((0,-.021,.50),(5.5,.040,3.95),white,.012,"rug")
+box((0,-.021,1.07),(7.2,.040,5.30),white,.012,"rug")
 
 # Window, linen curtains, and an aged oak sill.
 furnishings_start=len(vertices)

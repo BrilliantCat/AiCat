@@ -45,9 +45,11 @@ public final class LiveActivityManager: ObservableObject {
         
         contentState.outfit = CatSnapshot.load().outfit
         let now = Date()
+        contentState.quoteDay = DailySaying.index(now)
+        let nextMidnight = Calendar.current.dateInterval(of: .day, for: now)?.end ?? now.addingTimeInterval(86400)
         let nextTick = Date(timeIntervalSince1970: (floor(now.timeIntervalSince1970 / 900) + 1) * 900)
         let until = CatSnapshot.load().actionUntil
-        let content = ActivityContent(state: contentState, staleDate: until > now ? until : nextTick)
+        let content = ActivityContent(state: contentState, staleDate: min(nextMidnight, until > now ? until : nextTick))
 
         // Если активность уже запущена — плавно обновляем её
         let active = Activity<AiCatAttributes>.activities.first {

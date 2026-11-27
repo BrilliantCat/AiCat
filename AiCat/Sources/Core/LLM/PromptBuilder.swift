@@ -56,7 +56,7 @@ public struct PromptBuilder {
         create_calendar_event(title,startDate,endDate), get_calendar_events(date?).
         create_note(title,content), search_notes(query), search_knowledge_base(query).
         open_app(appName) — telegram, youtube, whatsapp, camera, settings, music, maps, notes.
-        device_action(command,value?) — flashlight_on/off, battery, brightness (0–100), timer_start (секунды), timer_cancel, maps (место), open_url (URL), copy_text (текст), run_shortcut (имя команды), settings, camera.
+        device_action(command,value?,detail?) — \(PhoneCommand.toolCommands). Яркость 0–100, длительность в секундах. Для звонка нужен указанный человеком номер или контакт. Для черновика value — адресат, detail — исходный текст. Для run_shortcut value — точное имя, detail — необязательный входной текст.
         translate(text,targetLanguage), generate_image(prompt на английском), play_music(style: lo-fi, cyberpunk, 8-bit).
         start_workout(workoutType: pushups, squats, yoga, breathing, mobility, plank; reps?).
         control_workout(action: pause, resume, next, rep, stop), get_status().

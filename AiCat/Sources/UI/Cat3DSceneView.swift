@@ -21,18 +21,20 @@ public struct Cat3DSceneView: UIViewRepresentable {
     var lessonPaused = false
     var breathStep: BreathStep?
     var hideRequest = 0
+    var recallRequest = 0
     var isVisible = true
     
     public init() {}
 
     init(motion: CatMotion?, inRoom: Bool = false, isRoaming: Bool = false,
-         lessonPaused: Bool = false, breathStep: BreathStep? = nil, hideRequest: Int = 0, isVisible: Bool = true) {
+         lessonPaused: Bool = false, breathStep: BreathStep? = nil, hideRequest: Int = 0, recallRequest: Int = 0, isVisible: Bool = true) {
         requestedMotion = motion
         self.inRoom = inRoom
         self.isRoaming = isRoaming
         self.lessonPaused = lessonPaused
         self.breathStep = breathStep
         self.hideRequest = hideRequest
+        self.recallRequest = recallRequest
         self.isVisible = isVisible
     }
     
@@ -163,6 +165,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             petSpace.addChildNode(toy)
             context.coordinator.toy = toy
             context.coordinator.view = scnView
+            context.coordinator.bird = WindowBird(scene: scene)
             scnView.updateFraming = { [weak coordinator = context.coordinator] in coordinator?.frameCamera(dt: nil) }
         }
         context.coordinator.startClock()
@@ -199,7 +202,11 @@ public struct Cat3DSceneView: UIViewRepresentable {
             mood == "🐟" ? .eat : mood == "💻" ? .computer :
             action == .play || mood == "🧶" ? .play : speech.isSpeaking ? .talk : .idle)
         // 1. Обновляем визуальный гардероб в 3D
-        updateOutfitVisibility(in: cat, currentOutfit: actionHandler.state.currentOutfit, isDressed: actionHandler.state.isDressed)
+        let outfit = actionHandler.state.isDressed ? actionHandler.state.currentOutfit : nil
+        if coordinator.lastOutfit != outfit {
+            updateOutfitVisibility(in: cat, currentOutfit: outfit, isDressed: outfit != nil)
+            coordinator.lastOutfit = outfit
+        }
         
         // 2. Выполняем конечно-автоматную анимацию под уникальным токеном
         let token = actionHandler.state.executionToken
@@ -220,6 +227,10 @@ public struct Cat3DSceneView: UIViewRepresentable {
             coordinator.lastHideRequest = hideRequest
             coordinator.beginVisit(.hide)
         }
+        if coordinator.lastRecallRequest != recallRequest {
+            coordinator.lastRecallRequest = recallRequest
+            coordinator.beginVisit(.recall)
+        }
         if !animate {
             if !lessonPaused || poseChanged { coordinator.rig?.set(motion, reduced: true) }
             if reduceMotion { coordinator.showStillBall(playing: motion == .play) }
@@ -236,8 +247,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
     }
     private static func installOutfits(on cat: SCNNode) {
         guard let head = cat.childNode(withName: "head", recursively: true),
-              let neck = cat.childNode(withName: "neck", recursively: true),
-              let chest = cat.childNode(withName: "chest", recursively: true) else { return }
+              let neck = cat.childNode(withName: "neck", recursively: true) else { return }
         func item(_ name: String, on parent: SCNNode) -> SCNNode {
             let group = SCNNode()
             group.name = name
@@ -274,12 +284,6 @@ public struct Cat3DSceneView: UIViewRepresentable {
         crown.simdScale = [1,0.40,1.04]
         let brim = piece(SCNSphere(radius: 0.17), color: leather, at: [0,0.30,0.19], in: cap)
         brim.simdScale = [1,0.09,0.84]
-        let hoodie = item(CatGarment.hoodie.rawValue, on: chest)
-        let hood = piece(SCNTorus(ringRadius: 0.275, pipeRadius: 0.053), color: .systemTeal,
-                         at: [0,0.14,0.17], in: hoodie)
-        hood.eulerAngles.x = -0.53
-        let garment = piece(SCNSphere(radius: 1), color: .systemTeal, at: [0,-0.013,-0.01], in: hoodie)
-        garment.simdScale = [0.334,0.36,0.49]
         let pendant = item(CatGarment.pendant.rawValue, on: neck)
         let band = piece(SCNTorus(ringRadius: 0.262, pipeRadius: 0.019), color: .brown,
                          at: [0,0.055,0.037], in: pendant)
@@ -315,12 +319,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             wing.eulerAngles.z = -side * .pi/2
         }
         _ = piece(SCNSphere(radius: 0.022), color: amber, at: [0,-0.044,0.377], in: bow)
-        let vest = item(CatGarment.vest.rawValue, on: chest)
-        let wool = piece(SCNSphere(radius: 1), color: amber, at: [0,-0.022,-0.054], in: vest)
-        wool.simdScale = [0.322,0.35,0.46]
-        for offset: Float in [0.00,-0.077] {
-            _ = piece(SCNSphere(radius: 0.016), color: .brown, at: [0,offset,0.304], in: vest)
-        }
+
     }
 
     private func scaleAction(from start: SCNVector3 = SCNVector3(1, 1, 1),
@@ -429,13 +428,17 @@ public struct Cat3DSceneView: UIViewRepresentable {
         private var speed: Float = 0
         private var previousFrame: CFTimeInterval?
         private var holdingCat = false
-        enum Visit { case scratch, sofa, window, hide, nudge, descend }
+        enum Visit { case scratch, sofa, window, hide, nudge, recall, descend }
         private var visit: Visit?
+        private var nextVisit: (Visit, SIMD3<Float>?)?
         private var arrived = false
         private var targetWorld = SIMD3<Float>.zero
         private var jumpStart: SIMD3<Float>?
         private var visitTime: Float = 0
         private var autonomousTime: Float = 0
+        var bird: WindowBird?
+        var lastOutfit: String?
+        private var birdClock: Float = 0
         private var sign: SCNNode?
         private var effect: AVAudioPlayer?
         var lastExecutedToken: String = ""
@@ -443,7 +446,12 @@ public struct Cat3DSceneView: UIViewRepresentable {
         private var lastPetTime: TimeInterval = 0
         
         var lastHideRequest: Int
-        init(_ parent: Cat3DSceneView) { self.parent = parent; lastHideRequest = parent.hideRequest }
+        var lastRecallRequest: Int
+        init(_ parent: Cat3DSceneView) {
+            self.parent = parent
+            lastHideRequest = parent.hideRequest
+            lastRecallRequest = parent.recallRequest
+        }
 
         func resetGame() {
             game.stop()
@@ -461,16 +469,21 @@ public struct Cat3DSceneView: UIViewRepresentable {
         func frameCamera(dt: Float?) {
             guard let view, let cameraNode = view.pointOfView, let camera = cameraNode.camera,
                   let traveller, view.bounds.height > 0, view.bounds.width > 0 else { return }
-            let catX = traveller.simdWorldPosition.x
+            let position = traveller.simdWorldPosition
+            let catX = position.x
             let ballX = game.ball.x * CatRoomScenery.kittenScale
             let playing = game.phase != .idle
-            let desiredX = playing ? catX * 0.38 + ballX * 0.15 : catX * 0.4
+            let following = 0.40 + 0.16 * min(1, max(0, position.z / 2))
+            let desiredX = playing ? catX * 0.38 + ballX * 0.15 : catX * following
             let alpha = dt.map { 1 - exp(-3 * $0) } ?? 1
             focusX += (desiredX - focusX) * alpha
             let desiredWidth: Float = playing ? 4.20 : 3.20
             fieldWidth += (desiredWidth - fieldWidth) * alpha
-            var half = max(fieldWidth / 2, abs(catX - focusX) + 1.47 * CatRoomScenery.kittenScale)
+            // Foreground subjects occupy more of the image at the same world-space width.
+            let perspective = max(1, 5.5 / max(2, 6.30 - position.z))
+            var half = max(fieldWidth / 2, (abs(catX - focusX) + 1.47 * CatRoomScenery.kittenScale) * perspective)
             if playing { half = max(half, abs(ballX - focusX) + 0.22) }
+            half = min(half, 2.85)
             let aspect = Float(view.bounds.width / view.bounds.height)
             camera.fieldOfView = CGFloat(2 * atan(max(1.48, half/aspect) / 5.5) * 180 / Float.pi)
             cameraNode.simdPosition = [focusX,2.20,6.30]
@@ -488,6 +501,10 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let dt = Float(min(0.08, max(0, link.timestamp - (previousFrame ?? link.timestamp))))
             previousFrame = link.timestamp
             guard let rig, let traveller else { return }
+            if parent.inRoom && !parent.reduceMotion {
+                birdClock += dt
+                if birdClock > 28 { birdClock = 0; bird?.fly(reducedMotion: false) }
+            }
             if parent.inRoom && parent.requestedMotion == nil && baseMotion == .idle && !holdingCat && visit == nil && game.phase == .idle {
                 autonomousTime += dt
                 if autonomousTime > 75 {
@@ -587,7 +604,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
         }
 
         func beginVisit(_ kind: Visit, at point: SIMD3<Float>? = nil) {
-            guard parent.inRoom, parent.requestedMotion == nil, baseMotion != .sleep, let traveller else { return }
+            guard parent.inRoom, parent.requestedMotion == nil, baseMotion != .sleep || kind == .recall, let traveller else { return }
+            if !parent.reduceMotion, traveller.simdWorldPosition.y > 0.10,
+               visit == .sofa || visit == .window || visit == .hide || visit == .descend {
+                nextVisit = (kind, point)
+                if visit != .descend { descend() }
+                return
+            }
             endVisit()
             resetGame()
             destination = nil
@@ -597,16 +620,21 @@ public struct Cat3DSceneView: UIViewRepresentable {
             visit = kind
             switch kind {
             case .descend: return
+            case .recall: targetWorld = .zero
             case .hide:
                 targetWorld = Bool.random() ? [-1.12, 0.31, -2.92] : [0.06, 0.37, -2.89]
-            case .window: targetWorld = [-1.0, 0.54, -2.38]
-            case .sofa: targetWorld = [min(0.15, max(-1.72, point?.x ?? -0.8)), 0.54, -2.20]
-            case .scratch: targetWorld = point ?? traveller.simdWorldPosition
+            case .window:
+                targetWorld = CatRoomScenery.sofaSeat(tappedX: -1.5)
+                if bird == nil, let scene = view?.scene { bird = WindowBird(scene: scene) }
+                bird?.fly(reducedMotion: parent.reduceMotion)
+            case .sofa:
+                targetWorld = CatRoomScenery.sofaSeat(tappedX: point?.x ?? 0)
+            case .scratch: targetWorld = CatRoomScenery.floorTarget(point ?? traveller.simdWorldPosition)
             case .nudge:
                 jumpStart = traveller.simdPosition
                 let position = traveller.simdWorldPosition
                 let side: Float = (point?.x ?? position.x) >= position.x ? -1 : 1
-                targetWorld = [position.x + side * 0.18, 0, position.z]
+                targetWorld = CatRoomScenery.floorTarget([position.x + side * 0.18, 0, position.z])
                 feedback("Nudge")
             }
             if parent.reduceMotion {
@@ -614,14 +642,20 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 arrived = true
                 if kind == .hide { showSearchSign() }
                 else if kind == .scratch { feedback("Scratch"); endVisit() }
-                else if kind == .nudge { endVisit() }
-                else { rig?.set(.think, reduced: true) }
+                else if kind == .nudge || kind == .recall { endVisit() }
+                else {
+                    traveller.eulerAngles.y = targetWorld.x < -1 ? 1.45 : -1.45
+                    rig?.set(.think, reduced: true)
+                }
             }
         }
 
         private func endVisit() {
             guard visit != nil else { return }
+            let leavingFurniture = visit == .sofa || visit == .window || visit == .hide || visit == .descend
             visit = nil
+            nextVisit = nil
+            rig?.gaze = .zero
             visitTime = 0
             arrived = false
             jumpStart = nil
@@ -630,7 +664,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             effect?.stop()
             if let traveller, traveller.position.y > 0 {
                 traveller.simdPosition.y = 0
-                traveller.simdPosition.z = -1.35 / CatRoomScenery.kittenScale
+                if leavingFurniture { traveller.simdPosition.z = -1.35 / CatRoomScenery.kittenScale }
             }
             rest = 4
         }
@@ -647,6 +681,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let scale = CatRoomScenery.kittenScale
             let goal = targetWorld / scale
             let high = targetWorld.y > 0.1
+            let seatHeading: Float = targetWorld.x < -1 ? 1.45 : -1.45
             let approach = high ? SIMD3<Float>(goal.x, 0, -1.45 / scale) : goal
             let offset = approach - traveller.simdPosition
             let distance = simd_length(offset)
@@ -664,7 +699,12 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 let t = min(1, visitTime / 0.55)
                 traveller.simdPosition = start + (goal - start) * t + SIMD3(0, 0.95 * t * (1-t), 0)
                 pose = .stretch
-                if t >= 1 { traveller.simdPosition = goal; endVisit() }
+                if t >= 1 {
+                    let requested = nextVisit
+                    traveller.simdPosition = goal
+                    endVisit()
+                    if let (kind, point) = requested { beginVisit(kind, at: point) }
+                }
             } else if !arrived && jumpStart == nil && distance > 0.035 {
                 let yaw = atan2(offset.x, offset.z)
                 turn(traveller, to: yaw, step: dt)
@@ -680,15 +720,17 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 visitTime += dt
                 let t = min(1, visitTime / 0.47)
                 traveller.simdPosition = start + (goal - start) * t + SIMD3(0, 1.3 * t * (1-t), 0)
-                pose = .stretch
+                if kind == .sofa || kind == .window { turn(traveller, to: seatHeading, step: dt * 2) }
+                pose = t > 0.70 ? .think : .stretch
                 if t >= 1 { arrived = true; visitTime = 0 }
             } else {
                 if !arrived { arrived = true; speed = 0 }
                 visitTime += dt
                 switch kind {
                 case .descend: break
+                case .recall: endVisit()
                 case .scratch:
-                    pose = .stretch
+                    pose = .scratch
                     if Int(visitTime / 0.52) != Int((visitTime - dt) / 0.52) { feedback("Scratch") }
                     if visitTime > 2.6 { endVisit() }
                 case .nudge: break
@@ -697,13 +739,16 @@ public struct Cat3DSceneView: UIViewRepresentable {
                     if sign == nil { showSearchSign() }
                 case .window, .sofa:
                     pose = .think
-                    turn(traveller, to: kind == .window ? .pi : -0.4, step: dt)
+                    turn(traveller, to: seatHeading, step: dt)
+                    if kind == .window, let position = bird?.visiblePosition {
+                        let local = traveller.simdConvertPosition(position, from: nil)
+                        rig.gaze = [min(1,max(-1,local.x)), -min(1,max(0,local.y*0.45))]
+                    }
                     if visitTime > 16 { descend() }
                 }
             }
             rig.set(pose, reduced: false)
             rig.advance(by: dt, strideRate: rate)
-            if kind == .scratch && arrived { rig.scratch(at: visitTime) }
         }
 
         private func descend() {
@@ -742,7 +787,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 if visit == .hide { descend(); feedback("Nudge") }
                 else { beginVisit(.nudge, at: [p.x, p.y, p.z]) }
             } else if hit.node.name == "SittingRoom", abs(p.y) < 0.035,
-                      abs(p.x) < 2.75, (-1.475...2.475).contains(p.z) {
+                      CatRoomScenery.rugX.contains(p.x), CatRoomScenery.rugZ.contains(p.z) {
                 beginVisit(.scratch, at: [p.x,0,p.z])
             }
         }
@@ -756,7 +801,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let t = -near.y / dy
             guard (0...1).contains(t) else { return }
             let target = SIMD2(near.x + (far.x - near.x) * t, near.z + (far.z - near.z) * t)
-            guard abs(target.x) <= 2.75, (-1.475...2.475).contains(target.y), let traveller else { return }
+            guard CatRoomScenery.rugX.contains(target.x), CatRoomScenery.rugZ.contains(target.y), let traveller else { return }
             endVisit()
             destination = nil
             if game.phase == .idle {
@@ -808,16 +853,27 @@ public struct Cat3DSceneView: UIViewRepresentable {
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard parent.inRoom, parent.requestedMotion == nil, let view = gesture.view as? SCNView else { return }
             let point = gesture.location(in: view)
+            if let node = view.hitTest(point, options: nil).first?.node, bird?.owns(node) == true {
+                if visit == .window { bird?.fly(reducedMotion: parent.reduceMotion) }
+                else { beginVisit(.window) }
+                return
+            }
             if !hitsCat(point, in: view) {
                 if let hit = view.hitTest(point, options: nil).first, hit.node.name == "SittingRoom" {
                     let p = hit.worldCoordinates
-                    if abs(p.x - 1.77) < 0.45 && abs(p.z + 2.18) < 0.50 && p.y > 0.04 {
+                    let local = SIMD3<Float>(p.x, p.y, p.z + 2.75) / 1.23 - SIMD3(0,0,2.75)
+                    if (-1.89...0.77).contains(local.x), (1.10...2.90).contains(local.y), local.z < -2.70 {
+                        if visit == .window { bird?.fly(reducedMotion: parent.reduceMotion) }
+                        else { beginVisit(.window) }
+                        return
+                    }
+                    if abs(local.x - 1.44) < 0.38 && abs(local.z + 2.35) < 0.50 && local.y > 0.04 {
                         if let on = CatRoomScenery.toggleLamp(in: view.scene) {
                             UserDefaults.standard.set(on, forKey: "aicat.lampOn")
                         }
                         return
                     }
-                    if (-2.12...0.51).contains(p.x), (-2.94 ... -1.91).contains(p.z), p.y > 0.08 {
+                    if (-2.12...0.51).contains(local.x), (-2.94 ... -1.91).contains(local.z), local.y > 0.08 {
                         if visit != .hide { beginVisit(.sofa, at: [p.x,p.y,p.z]) }
                         return
                     }
