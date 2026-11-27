@@ -197,6 +197,9 @@ final class AiCatTests: XCTestCase {
         let today = DailySaying.index(evening, zone: zone)
         XCTAssertEqual(today, DailySaying.index(evening.addingTimeInterval(-3600), zone: zone))
         let tomorrow = DailySaying.index(evening.addingTimeInterval(60), zone: zone)
+        XCTAssertEqual(tomorrow, (today + 1) % DailySaying.sayings.count)
+        let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        XCTAssertEqual(DailySaying.index(evening.addingTimeInterval(60), zone: utc), today)
         XCTAssertNotEqual(DailySaying.sayings[today].text, DailySaying.sayings[tomorrow].text)
     }
 

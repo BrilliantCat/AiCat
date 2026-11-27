@@ -47,10 +47,10 @@ enum DailySaying {
         ("Терпение и труд всё перетрут.", "Русская пословица")
     ]
     static func index(_ date: Date, zone: TimeZone = .current) -> Int {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
-        let day = calendar.ordinality(of: .day, in: .era, for: date) ?? 1
-        return (day - 1) % sayings.count
+        // Apply the offset at this instant, including any daylight-saving adjustment.
+        let localSeconds = date.timeIntervalSince1970 + Double(zone.secondsFromGMT(for: date))
+        let day = Int(floor(localSeconds / 86_400))
+        return (day % sayings.count + sayings.count) % sayings.count
     }
     static func forDay(_ date: Date) -> Saying { sayings[index(date)] }
 }
