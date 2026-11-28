@@ -281,8 +281,8 @@ public struct Cat3DSceneView: UIViewRepresentable {
                   color: .darkGray, at: [0,0.067,0.402], in: glasses)
         let cap = item(CatGarment.cap.rawValue, on: head)
         let leather = UIColor(red: 0.26, green: 0.15, blue: 0.09, alpha: 1)
-        let crown = piece(SCNSphere(radius: 0.20), color: leather, at: [0,0.319,0.035], in: cap)
-        crown.simdScale = [1,0.40,1.04]
+        let capDome = piece(SCNSphere(radius: 0.20), color: leather, at: [0,0.319,0.035], in: cap)
+        capDome.simdScale = [1,0.40,1.04]
         let brim = piece(SCNSphere(radius: 0.17), color: leather, at: [0,0.30,0.19], in: cap)
         brim.simdScale = [1,0.09,0.84]
         let pendant = item(CatGarment.pendant.rawValue, on: neck)
@@ -311,11 +311,11 @@ public struct Cat3DSceneView: UIViewRepresentable {
         _ = piece(SCNBox(width: 0.116, height: 0.009, length: 0.012, chamferRadius: 0.004),
                   color: amber, at: [0,0.065,0.403], in: readers)
         let crown = item(CatGarment.crown.rawValue, on: head)
-        let band = piece(SCNTorus(ringRadius: 0.16, pipeRadius: 0.019), color: .systemYellow, at: [0,0.31,0.05], in: crown)
+        let crownBand = piece(SCNTorus(ringRadius: 0.16, pipeRadius: 0.019), color: .systemYellow, at: [0,0.31,0.05], in: crown)
         for i in 0..<7 {
             let angle = Float(i) * 2 * Float.pi / 7
             _ = piece(SCNCone(topRadius: 0.003, bottomRadius: 0.042, height: 0.095), color: .systemYellow,
-                      at: [0.16*cos(angle),0.044,0.16*sin(angle)], in: band)
+                      at: [0.16*cos(angle),0.044,0.16*sin(angle)], in: crownBand)
         }
         let necklace = item(CatGarment.pearl.rawValue, on: neck)
         for i in 0..<20 {
