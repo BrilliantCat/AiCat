@@ -172,7 +172,7 @@ public struct MainView: View {
             inputText = ""
             sendUserQuery(text)
         }
-        .onChange(of: speechRecognizer.isRecording) { _, recording in if recording { inRoom = false } }
+        .onChange(of: speechRecognizer.isRecording) { _, recording in if recording { isInputFocused = false; inRoom = false } }
     }
 
     private var catMotion: CatMotion? {
@@ -424,8 +424,15 @@ public struct MainView: View {
                 .padding(.horizontal)
                 .padding(.top, 6)
             }
+            .overlay {
+                if chatMessages.isEmpty {
+                    Text("О чём поговорим?").foregroundStyle(.secondary).allowsHitTesting(false)
+                }
+            }
             .scrollDismissesKeyboard(.interactively)
-            .defaultScrollAnchor(.bottom)
+            .onAppear {
+                if let last = chatMessages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
             .onTapGesture {
                 isInputFocused = false
             }
@@ -447,6 +454,7 @@ public struct MainView: View {
                     .submitLabel(.send)
                     .onSubmit { submitInput() }
                     .focused($isInputFocused)
+                    .disabled(speechRecognizer.isRecording || speechRecognizer.isTranscribing)
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -524,6 +532,7 @@ public struct MainView: View {
         if let img = image {
             let name = "\(UUID().uuidString).jpg"
             savedName = name
+            ChatMessage.recentImages.setObject(img, forKey: name as NSString)
             DispatchQueue.global(qos: .background).async {
                 if let data = img.jpegData(compressionQuality: 0.85) {
                     let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -607,8 +616,15 @@ public struct ChatMessage: Identifiable, Codable {
         self.imageData = imageData
     }
     
+    fileprivate static let recentImages: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 4
+        return cache
+    }()
+
     public var image: UIImage? {
         if let name = imageFileName {
+            if let image = Self.recentImages.object(forKey: name as NSString) { return image }
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let fileURL = docs.appendingPathComponent("Images").appendingPathComponent(name)
             if let data = try? Data(contentsOf: fileURL), let img = UIImage(data: data) {
@@ -624,6 +640,7 @@ public struct ChatMessage: Identifiable, Codable {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    @State private var attachment: UIImage?
     
     var body: some View {
         HStack {
@@ -635,7 +652,7 @@ struct MessageBubble: View {
                     .font(.body)
                     .foregroundColor(.white)
                 
-                if let img = message.image {
+                if let img = attachment {
                     Image(uiImage: img)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -665,6 +682,12 @@ struct MessageBubble: View {
             .cornerRadius(16)
             
             if message.sender == .cat { Spacer() }
+        }
+        .task(id: message.id) {
+            guard attachment == nil, message.imageFileName != nil || message.imageData != nil else { return }
+            let snapshot = message
+            let loaded = await Task.detached(priority: .utility) { snapshot.image }.value
+            if !Task.isCancelled { attachment = loaded }
         }
     }
 }

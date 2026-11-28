@@ -53,8 +53,8 @@ public final class LLMEngine: ObservableObject {
     }
 
     func conversation(_ text: String, history: [ChatMessage], automatic: Bool) async -> (String, UIImage?, String) {
-        let localQuestion = await MainActor.run { !RAGTool.shared.searchKnowledge(query: text, topK: 1).isEmpty }
-        if automatic && !localQuestion && directCommand(text) == nil && !wantsTools(text),
+        if automatic && directCommand(text) == nil && !wantsTools(text),
+           await MainActor.run(body: { RAGTool.shared.searchKnowledge(query: text, topK: 1).isEmpty }),
            let reply = await HordeChat.reply(to: text, history: history) {
             return (Self.continuation(reply.text, after: text, history: history), nil, reply.model)
         }

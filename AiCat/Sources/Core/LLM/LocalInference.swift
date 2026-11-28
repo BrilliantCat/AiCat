@@ -8,15 +8,31 @@ import UIKit
 actor LocalInference {
     static let shared = LocalInference()
 
+    private var cachedModel: OpaquePointer?
+    private var cachedURL: URL?
+    private var cachedDate: Date?
+
+    func releaseTextModel() {
+        if let cachedModel { llama_model_free(cachedModel) }
+        cachedModel = nil
+        cachedURL = nil
+    }
+
     private init() { llama_backend_init() }
 
     func reply(url: URL, prompt: String, system: String, history: [(role: String, content: String)] = []) throws -> String {
         var modelParams = llama_model_default_params()
         modelParams.n_gpu_layers = 99
-        guard let model = llama_model_load_from_file(url.path, modelParams) else {
+        let modified = try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        if cachedURL != url || cachedDate != modified || cachedModel == nil {
+            releaseTextModel()
+            cachedModel = llama_model_load_from_file(url.path, modelParams)
+            cachedURL = url
+            cachedDate = modified
+        }
+        guard let model = cachedModel else {
             throw failure("Не удалось загрузить GGUF. Проверь целостность файла модели.")
         }
-        defer { llama_model_free(model) }
         var params = llama_context_default_params()
         params.n_ctx = 4096
         params.n_batch = 512
@@ -87,6 +103,7 @@ actor LocalInference {
                 "Translate the visual description into concise English for an image generator. Preserve subjects, colors, style and spatial relations. Output only the description.")
             if !translated.isEmpty { conditioning = translated }
         }
+        releaseTextModel()
         let modelConfiguration = MLModelConfiguration()
         modelConfiguration.computeUnits = .cpuAndNeuralEngine
         let pipeline = try StableDiffusionPipeline(resourcesAt: url, controlNet: [], configuration: modelConfiguration,

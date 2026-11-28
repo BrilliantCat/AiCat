@@ -20,13 +20,13 @@ struct AiCatLiveActivity: Widget {
                 CatPicture(scene: "idle", islandSide: "leading", outfit: context.state.outfit, islandState: "peek")
                     .frame(width: 38, height: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(saying.text).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
-                    Text(saying.source).font(.caption2).foregroundStyle(.secondary)
+                    Text(saying.text).foregroundStyle(.white).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    Text(saying.source).font(.caption2).foregroundStyle(.white.opacity(0.9))
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .activityBackgroundTint(.clear)
+            .activityBackgroundTint(.black.opacity(0.83))
             .widgetURL(URL(string: "aicat://chat"))
         } dynamicIsland: { context in
             let mood = context.isStale ? "😼" : context.state.moodEmoji

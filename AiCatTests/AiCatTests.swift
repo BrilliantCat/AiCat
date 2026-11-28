@@ -112,20 +112,23 @@ final class AiCatTests: XCTestCase {
         for fps: Float in [20, 30, 60] {
             var game = CatBallGame()
             game.start(at: .zero, facing: -0.54, repeats: true)
+            var jump: Float = 0
             var minX = game.position.x
             var maxX = minX
             for _ in 0..<Int(18 * fps) {
+                jump = max(jump, game.leapHeight)
                 let previousHits = game.hits
                 game.advance(by: 1 / fps)
                 minX = min(minX, game.position.x)
                 maxX = max(maxX, game.position.x)
-                XCTAssertLessThanOrEqual(abs(game.ball.x) * CatRoomScenery.kittenScale, 1.786)
+                XCTAssertLessThanOrEqual(abs(game.ball.x) * CatRoomScenery.kittenScale, CatRoomScenery.rugX.upperBound)
                 if game.hits > previousHits {
                     let paw = SIMD2<Float>(0.163 * cos(game.heading) + 0.72 * sin(game.heading),
                                            -0.163 * sin(game.heading) + 0.72 * cos(game.heading))
                     XCTAssertLessThanOrEqual(simd_distance(game.position + paw, game.ball), CatBallGame.radius)
                 }
             }
+            XCTAssertGreaterThan(jump, 0.25)
             XCTAssertGreaterThanOrEqual(game.hits, 3)
             XCTAssertGreaterThan((maxX - minX) * CatRoomScenery.kittenScale, 2)
         }
@@ -186,6 +189,28 @@ final class AiCatTests: XCTestCase {
             XCTAssertTrue(CatRoomScenery.rugX.contains(target.x + side * 0.6))
             XCTAssertTrue(CatRoomScenery.rugZ.contains(target.z))
             XCTAssertEqual(target, CatRoomScenery.floorTarget(target + SIMD3(side, 0, side)))
+        }
+    }
+
+    @MainActor
+    func testLessonSpeechOmitsEscapedQuoteMarks() {
+        let text = #"Начинаем: \"Кошачья спина\". «Вдох»."#
+        XCTAssertEqual(CatSpeechSynthesizer.shared.utterance(for: text).speechString, "Начинаем: Кошачья спина. Вдох.")
+    }
+
+    func testBallCanReachEveryCarpetCorner() {
+        let scale = CatRoomScenery.kittenScale
+        for x in [CatRoomScenery.rugX.lowerBound, CatRoomScenery.rugX.upperBound] {
+            for z in [CatRoomScenery.rugZ.lowerBound, CatRoomScenery.rugZ.upperBound] {
+                var game = CatBallGame()
+                game.start(at: .zero, facing: 0, target: SIMD2(x,z)/scale, repeats: false)
+                var closest: Float = .infinity
+                for _ in 0..<480 {
+                    game.advance(by: 1/60)
+                    closest = min(closest, simd_distance(game.ball * scale, SIMD2(x,z)))
+                }
+                XCTAssertLessThan(closest, 0.17)
+            }
         }
     }
 
@@ -362,7 +387,7 @@ final class AiCatTests: XCTestCase {
         let rig = try XCTUnwrap(CatMotionRig(cat: root))
         let surface = try XCTUnwrap(root.childNode(withName: "BritishKittenSkin", recursively: true))
         let skin = try XCTUnwrap(surface.skinner)
-        XCTAssertEqual(skin.bones.count, 31)
+        XCTAssertEqual(skin.bones.count, 33)
         let paw = try XCTUnwrap(root.childNode(withName: "foreL3", recursively: true))
         rig.set(.walk, reduced: false)
         rig.advance(by: 0.8)

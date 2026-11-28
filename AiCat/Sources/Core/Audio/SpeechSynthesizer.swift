@@ -30,7 +30,9 @@ public final class CatSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegate, 
     }
 
     func utterance(for text: String) -> AVSpeechUtterance {
-        let result = AVSpeechUtterance(string: text)
+        let clean = text.replacingOccurrences(of: "\\n", with: " ")
+            .components(separatedBy: CharacterSet(charactersIn: "\\\"«»“”„`")).joined()
+        let result = AVSpeechUtterance(string: clean)
         let voices = russianVoices
         result.voice = voices.first { $0.identifier == preferredVoiceID } ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
         switch tone {

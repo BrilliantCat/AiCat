@@ -25,9 +25,13 @@ struct AiCatApp: App {
                         TamagotchiManager.shared.didBecomeActive()
                         checkBackTapLaunch()
                     } else if newPhase == .background {
+                        Task { await LocalInference.shared.releaseTextModel() }
                         speechRecognizer.stopListening()
                         UserDefaults.standard.set(Date(), forKey: "aicat.lastDeparture")
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+                    Task { await LocalInference.shared.releaseTextModel() }
                 }
                 .onReceive(lifeTimer) { _ in
                     if scenePhase == .active && !YogaCoachTool.shared.isSessionActive && !CatFitnessCoach.shared.isWorkoutActive {

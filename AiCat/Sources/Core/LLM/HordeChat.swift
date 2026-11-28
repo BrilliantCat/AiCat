@@ -39,13 +39,13 @@ enum HordeChat {
     static func reply(to text: String, history: [ChatMessage]) async -> (text: String, model: String)? {
         let base = URL(string: "https://oai.aihorde.net/v1/")!
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForResource = 20
+        config.timeoutIntervalForResource = 8
         config.httpAdditionalHeaders = ["Authorization": "Bearer 0000000000"]
         let session = URLSession(configuration: config)
         defer { session.invalidateAndCancel() }
         do {
             var lookup = URLRequest(url: base.appendingPathComponent("models"))
-            lookup.timeoutInterval = 4
+            lookup.timeoutInterval = 2
             let (catalog, status) = try await session.data(for: lookup)
             guard (status as? HTTPURLResponse)?.statusCode == 200 else { return nil }
             let catalogModels = try JSONDecoder().decode(Catalog.self, from: catalog).data

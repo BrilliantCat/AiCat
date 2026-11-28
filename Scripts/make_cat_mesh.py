@@ -98,6 +98,12 @@ local = D[tuple(indices.T)]
 w = np.zeros((len(v),len(BONES)))
 for i,b in enumerate(owners):
     w[:,b]+=np.exp((local.min(axis=1)-local[:,i])/.043)
+for side,sign in [("L",-1),("R",1)]:
+    region=np.exp(-((v[:,1]-.76)/.18)**2-((v[:,2]-.27)/.16)**2)*np.clip(sign*v[:,0]/.14,0,1)
+    chest=BONES.index("chest")
+    transfer=w[:,chest]*region*.68
+    w[:,chest]-=transfer
+    w[:,BONES.index("blade"+side)]+=transfer
 j=np.argsort(w,axis=1)[:,-4:]
 w=np.take_along_axis(w,j,axis=1)
 w/=w.sum(axis=1)[:,None]

@@ -166,6 +166,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             context.coordinator.toy = toy
             context.coordinator.view = scnView
             context.coordinator.bird = WindowBird(scene: scene)
+            context.coordinator.visitors = RoomVisitors(scene: scene)
             scnView.updateFraming = { [weak coordinator = context.coordinator] in coordinator?.frameCamera(dt: nil) }
         }
         context.coordinator.startClock()
@@ -309,6 +310,18 @@ public struct Cat3DSceneView: UIViewRepresentable {
         }
         _ = piece(SCNBox(width: 0.116, height: 0.009, length: 0.012, chamferRadius: 0.004),
                   color: amber, at: [0,0.065,0.403], in: readers)
+        let crown = item(CatGarment.crown.rawValue, on: head)
+        let band = piece(SCNTorus(ringRadius: 0.16, pipeRadius: 0.019), color: .systemYellow, at: [0,0.31,0.05], in: crown)
+        for i in 0..<7 {
+            let angle = Float(i) * 2 * Float.pi / 7
+            _ = piece(SCNCone(topRadius: 0.003, bottomRadius: 0.042, height: 0.095), color: .systemYellow,
+                      at: [0.16*cos(angle),0.044,0.16*sin(angle)], in: band)
+        }
+        let necklace = item(CatGarment.pearl.rawValue, on: neck)
+        for i in 0..<20 {
+            let angle = Float(i) * 2 * Float.pi / 20
+            _ = piece(SCNSphere(radius: 0.033), color: .white, at: [0.269*cos(angle),0.045-0.14*sin(angle),0.07+0.26*sin(angle)], in: necklace)
+        }
         let bow = item(CatGarment.bow.rawValue, on: neck)
         let ribbon = piece(SCNTorus(ringRadius: 0.261, pipeRadius: 0.017), color: berry,
                            at: [0,0.049,0.042], in: bow)
@@ -428,7 +441,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         private var speed: Float = 0
         private var previousFrame: CFTimeInterval?
         private var holdingCat = false
-        enum Visit { case scratch, sofa, window, hide, nudge, recall, descend }
+        enum Visit { case mouse, scratch, sofa, window, hide, nudge, recall, descend }
         private var visit: Visit?
         private var nextVisit: (Visit, SIMD3<Float>?)?
         private var arrived = false
@@ -436,6 +449,9 @@ public struct Cat3DSceneView: UIViewRepresentable {
         private var jumpStart: SIMD3<Float>?
         private var visitTime: Float = 0
         private var autonomousTime: Float = 0
+        var visitors: RoomVisitors?
+        private var hideIndex = Int.random(in: 0..<4)
+        private var mouseCountdown: Float = 35
         var bird: WindowBird?
         var lastOutfit: String?
         private var birdClock: Float = 0
@@ -454,6 +470,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         }
 
         func resetGame() {
+            if game.phase != .idle { traveller?.simdPosition.y = 0 }
             game.stop()
             toy?.isHidden = true
         }
@@ -477,13 +494,13 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let desiredX = playing ? catX * 0.38 + ballX * 0.15 : catX * following
             let alpha = dt.map { 1 - exp(-3 * $0) } ?? 1
             focusX += (desiredX - focusX) * alpha
-            let desiredWidth: Float = playing ? 4.20 : 3.20
+            let desiredWidth: Float = playing ? 6.90 : visit == .hide ? 5.50 : 3.20
             fieldWidth += (desiredWidth - fieldWidth) * alpha
             // Foreground subjects occupy more of the image at the same world-space width.
             let perspective = max(1, 5.5 / max(2, 6.30 - position.z))
             var half = max(fieldWidth / 2, (abs(catX - focusX) + 1.47 * CatRoomScenery.kittenScale) * perspective)
-            if playing { half = max(half, abs(ballX - focusX) + 0.22) }
-            half = min(half, 2.85)
+            if playing { half = max(half, (abs(ballX - focusX) + 0.22) * max(1, 5.5 / (6.3 - game.ball.y * CatRoomScenery.kittenScale))) }
+            half = min(half, playing ? 6.7 : 2.85)
             let aspect = Float(view.bounds.width / view.bounds.height)
             camera.fieldOfView = CGFloat(2 * atan(max(1.48, half/aspect) / 5.5) * 180 / Float.pi)
             cameraNode.simdPosition = [focusX,2.20,6.30]
@@ -506,6 +523,11 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 if birdClock > 28 { birdClock = 0; bird?.fly(reducedMotion: false) }
             }
             if parent.inRoom && parent.requestedMotion == nil && baseMotion == .idle && !holdingCat && visit == nil && game.phase == .idle {
+                mouseCountdown -= dt
+                if mouseCountdown <= 0 {
+                    mouseCountdown = Float.random(in: 55...90)
+                    beginVisit(.mouse)
+                }
                 autonomousTime += dt
                 if autonomousTime > 75 {
                     autonomousTime = 0
@@ -534,14 +556,15 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 }
                 toy.simdPosition = [game.ball.x,CatBallGame.radius,game.ball.y]
                 toy.isHidden = game.phase == .idle
-                traveller.simdPosition = [game.position.x,0,game.position.y]
+                traveller.simdPosition = [game.position.x,game.leapHeight,game.position.y]
                 traveller.eulerAngles.y = game.heading
                 switch game.phase {
-                case .chasing: motion = game.strideRate < 0.51 ? .walk : .trot
+                case .chasing: motion = game.strideRate * CatBallGame.runSpeed < 0.78 ? .walk : .trot
                 case .batting: motion = .play
                 case .rollingAway, .idle: motion = .idle
                 }
-                strideRate = motion == .walk ? game.strideRate * CatBallGame.runSpeed / 0.58 : game.strideRate
+                strideRate = motion == .walk ? game.strideRate * CatBallGame.runSpeed / 0.58 : game.strideRate * CatBallGame.runSpeed / 1.38
+                if game.leapPhase != nil { motion = .pounce }
                 if game.phase == .batting {
                     traveller.simdPosition.y = max(0, sin(min(1, game.battingProgress) * .pi)) * 0.10
                 }
@@ -569,7 +592,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
                         speed += max(-2.4 * dt, min(1.6 * dt, desiredSpeed - speed))
                         let step = min(distance, dt * speed)
                         motion = speed > 0.75 ? .trot : .walk
-                        strideRate = dt > 0 ? step / (dt * (motion == .trot ? CatBallGame.runSpeed : 0.58)) : 0
+                        strideRate = dt > 0 ? step / (dt * (motion == .trot ? 1.38 : 0.58)) : 0
                         let next = position + direction * step
                         traveller.simdPosition = [next.x, 0, next.y]
                     }
@@ -585,7 +608,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
             if parent.requestedMotion == .walk { turn(traveller, to: -1.10, step: dt) }
             if holdingCat { motion = .purr }
             rig.set(motion, reduced: false)
-            rig.advance(by: dt, strideRate: strideRate, breathPhase: parent.breathStep?.phase(at: Date()))
+            rig.advance(by: dt, strideRate: strideRate, breathPhase: parent.breathStep?.phase(at: Date()), leapPhase: game.leapPhase)
             frameCamera(dt: dt)
         }
 
@@ -622,7 +645,12 @@ public struct Cat3DSceneView: UIViewRepresentable {
             case .descend: return
             case .recall: targetWorld = .zero
             case .hide:
-                targetWorld = Bool.random() ? [-1.12, 0.31, -2.92] : [0.06, 0.37, -2.89]
+                let places: [SIMD3<Float>] = [[-1.12,0.31,-2.92],[-2.64,0,-2.12],[1.11,0,-2.76],[2.29,0,-2.88]]
+                hideIndex = (hideIndex + 1) % places.count
+                targetWorld = places[hideIndex]
+            case .mouse:
+                if parent.reduceMotion { endVisit(); return }
+                visitors?.start()
             case .window:
                 targetWorld = CatRoomScenery.sofaSeat(tappedX: -1.5)
                 if bird == nil, let scene = view?.scene { bird = WindowBird(scene: scene) }
@@ -652,6 +680,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
 
         private func endVisit() {
             guard visit != nil else { return }
+            visitors?.mouse.isHidden = true
             let leavingFurniture = visit == .sofa || visit == .window || visit == .hide || visit == .descend
             visit = nil
             nextVisit = nil
@@ -679,6 +708,19 @@ public struct Cat3DSceneView: UIViewRepresentable {
 
         private func advanceVisit(_ kind: Visit, dt: Float, rig: CatMotionRig, traveller: SCNNode) {
             let scale = CatRoomScenery.kittenScale
+            if kind == .mouse {
+                guard let mouse = visitors?.advance(dt, chasedBy: traveller.simdWorldPosition) else { endVisit(); return }
+                let target = CatRoomScenery.floorTarget(mouse) / scale
+                let delta = target - traveller.simdPosition
+                let distance = simd_length(delta)
+                let yaw = atan2(delta.x,delta.z)
+                turn(traveller, to: yaw, step: dt * 1.5)
+                let step = min(max(0, distance-0.42), dt * 3.15 * max(0,cos(yaw-traveller.eulerAngles.y)))
+                if distance > 0.001 { traveller.simdPosition += delta * (step/distance) }
+                rig.set(step > dt * 0.7 ? .trot : .play, reduced: false)
+                rig.advance(by: dt, strideRate: step / max(0.001,dt*1.38))
+                return
+            }
             let goal = targetWorld / scale
             let high = targetWorld.y > 0.1
             let seatHeading: Float = targetWorld.x < -1 ? 1.45 : -1.45
@@ -713,7 +755,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 speed += min(2.6 * dt, max(-3 * dt, desired - speed))
                 traveller.simdPosition += offset / distance * min(distance, speed * dt)
                 pose = speed > 0.78 ? .trot : .walk
-                rate = speed / (pose == .walk ? 0.58 : CatBallGame.runSpeed)
+                rate = speed / (pose == .walk ? 0.58 : 1.38)
             } else if high && !arrived {
                 let start = jumpStart ?? traveller.simdPosition
                 jumpStart = start
@@ -727,7 +769,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
                 if !arrived { arrived = true; speed = 0 }
                 visitTime += dt
                 switch kind {
-                case .descend: break
+                case .mouse, .descend: break
                 case .recall: endVisit()
                 case .scratch:
                     pose = .scratch
@@ -735,6 +777,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
                     if visitTime > 2.6 { endVisit() }
                 case .nudge: break
                 case .hide:
+                    pose = .think
                     turn(traveller, to: -0.4, step: dt)
                     if sign == nil { showSearchSign() }
                 case .window, .sofa:
@@ -752,7 +795,7 @@ public struct Cat3DSceneView: UIViewRepresentable {
         }
 
         private func descend() {
-            if parent.reduceMotion { endVisit(); return }
+            if parent.reduceMotion || (traveller?.simdWorldPosition.y ?? 0) < 0.05 { endVisit(); return }
             guard let traveller else { return }
             sign?.removeFromParentNode()
             sign = nil
@@ -771,11 +814,18 @@ public struct Cat3DSceneView: UIViewRepresentable {
             let label = SCNNode(geometry: text)
             let bounds = label.boundingBox
             label.pivot = SCNMatrix4MakeTranslation((bounds.min.x + bounds.max.x)/2, 0, 0)
-            label.simdScale = SIMD3(repeating: 0.031)
-            label.eulerAngles.x = -.pi / 3
-            label.simdPosition = [0, 0.025, 0.6]
-            view?.scene?.rootNode.addChildNode(label)
-            sign = label
+            label.simdScale = SIMD3(repeating: 1.42 / max(1, bounds.max.x-bounds.min.x))
+            guard let visitors else { return }
+            label.simdPosition = visitors.captionAnchor
+            let backing = SCNPlane(width: 1.5, height: 0.45)
+            backing.firstMaterial?.diffuse.contents = UIColor.black
+            let plate = SCNNode(geometry: backing)
+            plate.simdPosition = label.simdPosition + SIMD3(0,0.13,-0.015)
+            let group = SCNNode()
+            group.addChildNode(plate)
+            group.addChildNode(label)
+            view?.scene?.rootNode.addChildNode(group)
+            sign = group
         }
 
         @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
@@ -853,6 +903,19 @@ public struct Cat3DSceneView: UIViewRepresentable {
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard parent.inRoom, parent.requestedMotion == nil, let view = gesture.view as? SCNView else { return }
             let point = gesture.location(in: view)
+            if visit == .hide && arrived {
+                // Accept a tap on the silhouette even when a basket or cushion covers the frontmost mesh.
+                let hits = view.hitTest(point, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
+                if hits.contains(where: { $0.node.name == "BritishKittenSkin" }) {
+                    descend()
+                    feedback("Nudge")
+                }
+                return
+            }
+            if view.hitTest(point, options: nil).first?.node.name == "MouseDoor" {
+                beginVisit(.mouse)
+                return
+            }
             if let node = view.hitTest(point, options: nil).first?.node, bird?.owns(node) == true {
                 if visit == .window { bird?.fly(reducedMotion: parent.reduceMotion) }
                 else { beginVisit(.window) }

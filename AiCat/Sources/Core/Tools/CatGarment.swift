@@ -10,15 +10,17 @@ enum CatGarment: String, CaseIterable, Identifiable {
     case hoodie = "Неоновый худи"
     case vest = "Горчичная жилетка"
 
+    case crown = "Звёздная корона"
+    case pearl = "Жемчужное ожерелье"
     case trousers = "Джинсовые штаны"
 
     enum Slot: String, CaseIterable { case head = "На голову", eyes = "Очки", neck = "На шею", body = "Одежда", legs = "Штаны" }
     var id: Self { self }
     var slot: Slot {
         switch self {
-        case .cap, .beret: return .head
+        case .cap, .beret, .crown: return .head
         case .glasses, .readers: return .eyes
-        case .pendant, .bow: return .neck
+        case .pendant, .bow, .pearl: return .neck
         case .hoodie, .vest: return .body
         case .trousers: return .legs
         }
@@ -30,6 +32,8 @@ enum CatGarment: String, CaseIterable, Identifiable {
         let hasGlasses = words.split(whereSeparator: { !$0.isLetter }).contains { $0.hasPrefix("очк") }
         return allCases.filter { item in
             switch item {
+            case .crown: return words.contains("корон")
+            case .pearl: return words.contains("жемчуж") || words.contains("ожерел")
             case .cap: return words.contains("кепк")
             case .beret: return words.contains("берет")
             case .glasses: return hasGlasses && !words.contains("янтар")

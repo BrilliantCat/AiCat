@@ -4,7 +4,7 @@ import Foundation
 struct CatBallGame {
     enum Phase { case idle, chasing, batting, rollingAway }
     static let radius: Float = 0.095
-    static let runSpeed: Float = 1.38
+    static let runSpeed: Float = 3.35
     private static let paw = SIMD2<Float>(0.163, 0.72)
     private(set) var phase: Phase = .idle
     private(set) var ball = SIMD2<Float>.zero
@@ -16,6 +16,10 @@ struct CatBallGame {
     private var speed: Float = 0
     var battingProgress: Float { battingTime / 0.56 }
     private var battingTime: Float = 0
+    private var leapTime: Float = 0
+    private var leapt = false
+    var leapPhase: Float? { leapTime > 0 ? 1 - leapTime / 0.46 : nil }
+    var leapHeight: Float { 0.42 * sin(.pi * min(1, leapTime / 0.46)) }
     private var repeats = false
     private var approach = SIMD2<Float>(0, 1)
 
@@ -24,6 +28,8 @@ struct CatBallGame {
     }
 
     private mutating func chooseApproach(to landing: SIMD2<Float>) {
+        leapTime = 0
+        leapt = false
         let delta = landing - position
         if length(delta) > 0.035 { approach = delta / length(delta) }
         let stand = (landing - approach * length(Self.paw)) * CatRoomScenery.kittenScale
@@ -55,19 +61,23 @@ struct CatBallGame {
     }
 
     private var nextTarget: SIMD2<Float> {
-        SIMD2<Float>(ball.x >= 0 ? -1.68 : 1.68, hits.isMultiple(of: 2) ? 0.615 : -0.35) / CatRoomScenery.kittenScale
+        let depths: [Float] = [1.45, -0.86, 2.72, 0.18]
+        return SIMD2<Float>(ball.x >= 0 ? -2.85 : 2.85, depths[hits % depths.count]) / CatRoomScenery.kittenScale
     }
 
     private static func onRug(_ p: SIMD2<Float>) -> SIMD2<Float> {
         // The playable floor stays the same width when the kitten is resized.
         let scale = CatRoomScenery.kittenScale
         let floor = p * scale
-        let target = CatRoomScenery.floorTarget([floor.x, 0, floor.y])
-        return SIMD2(target.x, target.z) / scale
+        let x = CatRoomScenery.rugX, z = CatRoomScenery.rugZ
+        let margin = Self.radius * scale
+        return SIMD2(min(x.upperBound-margin, max(x.lowerBound+margin, floor.x)),
+                     min(z.upperBound-margin, max(z.lowerBound+margin, floor.y))) / scale
     }
 
     mutating func advance(by dt: Float) {
         guard phase != .idle, dt > 0 else { return }
+        leapTime = max(0, leapTime - dt)
         let decay = exp(-2.2 * dt)
         ball += velocity * ((1 - decay) / 2.2)
         velocity *= decay
@@ -100,9 +110,13 @@ struct CatBallGame {
         let aim = distance > 0.13 ? atan2(direction.x, direction.y) : yaw
         let delta = atan2(sin(aim - heading), cos(aim - heading))
         heading += delta * min(1, dt * 8)
-        let desiredSpeed = min(Self.runSpeed, sqrt(4.8 * distance)) * max(0, cos(delta))
-        speed += max(-3.6 * dt, min(2.5 * dt, desiredSpeed - speed))
+        let desiredSpeed = min(Self.runSpeed, sqrt(11 * distance)) * max(0, cos(delta))
+        speed += max(-7 * dt, min(6 * dt, desiredSpeed - speed))
         let step = min(speed * dt, distance)
+        if !leapt && distance < 1.55 && speed > 1.65 && cos(delta) > 0.8 {
+            leapt = true
+            leapTime = 0.46
+        }
         position += direction * step
         strideRate = step / (dt * Self.runSpeed)
         let paw = position + SIMD2(Self.paw.x * cos(heading) + Self.paw.y * sin(heading),

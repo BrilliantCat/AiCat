@@ -24,7 +24,7 @@ public final class ToolRegistry {
         ToolDefinition(
             name: "cat_action",
             description: "Управление физическими действиями кота (трюки, анимации, гардероб)",
-            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "кепка, берет, черные или янтарные очки, кулон, бабочка, худи, жилетка, джинсовые штаны. take_off без item снимает всё."],
+            parametersSchema: ["action": "hang_on_island | feed | wash | somersault | play | dress_up | take_off | sleep | wake | pet", "item": "корона, жемчужное ожерелье, кепка, берет, черные или янтарные очки, кулон, бабочка, худи, жилетка, джинсовые штаны. take_off без item снимает всё."],
             requiresConfirmation: false
         ),
         ToolDefinition(

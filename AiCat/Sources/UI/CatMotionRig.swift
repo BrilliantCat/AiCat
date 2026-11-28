@@ -3,7 +3,7 @@ import simd
 import UIKit
 
 enum CatMotion: String, CaseIterable {
-    case idle, walk, trot, scratch, purr, play, sleep, eat, groom, think, talk, pushUp, squat, plank, yoga, stretch, curl, scan, computer, breath, shoulders
+    case idle, walk, trot, pounce, scratch, purr, play, sleep, eat, groom, think, talk, pushUp, squat, plank, yoga, stretch, curl, scan, computer, breath, shoulders
 
     var isExercise: Bool {
         switch self {
@@ -148,12 +148,13 @@ final class CatMotionRig {
         }
     }
 
-    func advance(by dt: Float, strideRate: Float = 1, breathPhase: Float? = nil) {
+    func advance(by dt: Float, strideRate: Float = 1, breathPhase: Float? = nil, leapPhase: Float? = nil) {
         elapsed += (motion == .walk || motion == .trot) ? dt * strideRate : dt
         if motion == .breath, let breathPhase, let clip = model.clips[motion.rawValue] {
             elapsed = clip.seconds * breathPhase
         }
-        blendTime += dt
+        if motion == .pounce, let leapPhase { elapsed = leapPhase * (model.clips["pounce"]?.seconds ?? 0.46) }
+        blendTime += motion == .pounce ? dt * 3 : dt
         blinkClock = (blinkClock + dt).truncatingRemainder(dividingBy: 4.3)
         let blink = min(1, max(0.06, abs(blinkClock - 3.86) / 0.09))
         let blend = min(1, blendTime / 0.36)

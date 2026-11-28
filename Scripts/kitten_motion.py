@@ -28,8 +28,12 @@ for s,side in [(-1,"L"),(1,"R")]:
             (.684,-.394),(.441,-.307),(.274,-.523),(.069,-.487)]
         label=("fore" if front else "hind")+side
         points=LEGS[label]=[(x,y,z) for y,z in yz]
+        base="chest" if front else "pelvis"
+        if front:
+            bone("blade"+side,base,(x*.85,.85,.20))
+            base="blade"+side
         for i,p in enumerate(points):
-            bone(label+str(i),("chest" if front else "pelvis") if i==0 else label+str(i-1),p)
+            bone(label+str(i),base if i==0 else label+str(i-1),p)
 
 N=len(BONES)
 bind=np.array(ORIGINS)
@@ -182,6 +186,14 @@ def frame(motion,phase):
         elif motion=="think":angle("head",[-.12,.19,.11])
         for label,p in feet.items():
             if label.startswith("hind") and motion!="squat":p[2]+=.12
+    elif motion=="pounce":
+        flight=np.sin(np.pi*phase)
+        angle("spine",[-.14*flight,0,0]);angle("neck",[.10*flight,0,0])
+        for label,p in feet.items():
+            fore=label.startswith("fore")
+            p[1]+=(.09 if fore else .16)*flight
+            p[2]+=(.24 if fore else -.17)*flight
+            wrist_pitch[label]=(-.25 if fore else .40)*flight
     elif motion=="play":
         root[1]=-.11+.04*pulse
         feet["foreR"][1:]=[.08+.064*pulse,.38+.27*pulse]
@@ -205,6 +217,9 @@ def frame(motion,phase):
         tail_phase=0 if motion=="settle" else t
         angle("tail"+str(i),[sway*.032*np.sin(tail_phase-i*.56),
                              sway*.061*np.sin(tail_phase-i*.47),0])
+    for side,offset in [("L",0),("R",np.pi)]:
+        sweep=.22 if motion=="trot" else .14 if motion in ("scratch","walk") else .025
+        angle("blade"+side,[sweep*np.sin(t+offset),0,.025*np.cos(t+offset)])
     # Solve toward room-space pads after the body shifts above the supporting legs.
     rotations=Rotation.from_euler("xyz",angles).as_matrix()
     world=rotations.copy();pos=local.copy();pos[0]+=root
@@ -257,7 +272,7 @@ def frame(motion,phase):
 
 
 def make_clips():
-    periods=dict(scratch=1.04,idle=6.4,walk=.8,trot=.54,sleep=4.2,eat=1.25,groom=1.1,computer=1.0,purr=2.2,
+    periods=dict(pounce=.46,scratch=1.04,idle=6.4,walk=.8,trot=.54,sleep=4.2,eat=1.25,groom=1.1,computer=1.0,purr=2.2,
                  play=.95,talk=1.3,think=3.8,scan=3.8,squat=2.2,pushUp=2.2,plank=3.2,
                  yoga=3.6,stretch=4.2,curl=4.8,breath=4.0,shoulders=2.8)
     clips={name:dict(seconds=seconds,frames=[frame(name,i/24) for i in range(24)]) for name,seconds in periods.items()}
